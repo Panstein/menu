@@ -1,5 +1,7 @@
 # Build: publica a API e as telas (Blazor WebAssembly) separadamente
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# Evita segmentation fault (status 139) do .NET no ambiente de containers do Render
+ENV DOTNET_EnableWriteXorExecute=0
 WORKDIR /src
 
 # Restaura primeiro (camada em cache enquanto os .csproj não mudarem)
@@ -15,6 +17,7 @@ RUN dotnet publish src/Chamados.Web/Chamados.Web.csproj -c Release -o /out/web -
 
 # Execução: a API serve a própria API e as telas (wwwroot) num único serviço
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
+ENV DOTNET_EnableWriteXorExecute=0
 WORKDIR /app
 COPY --from=build /out/api ./
 COPY --from=build /out/web/wwwroot ./wwwroot
