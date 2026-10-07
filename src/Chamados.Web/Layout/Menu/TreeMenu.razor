@@ -1,0 +1,158 @@
+@using Chamados.Web.Layout.Menu
+@implements IDisposable
+@inject NavigationManager Nav
+@inject AuthService Auth
+@inject MenuLateralService Menu
+
+<nav class="tree" aria-label="Menu principal">
+    @if (carregando)
+    {
+        <div class="tree-status"><i class="bi bi-hourglass-split"></i> Carregando menu...</div>
+    }
+    else if (erro is not null)
+    {
+        <div class="tree-status erro">
+            <i class="bi bi-exclamation-triangle"></i> @erro
+            <button type="button" class="tree-retry" @onclick="CarregarAsync">Tentar novamente</button>
+        </div>
+    }
+    <ul class="tree-list" role="tree">
+        @foreach (var item in Itens)
+        {
+            @RenderItem(item, 0)
+        }
+    </ul>
+</nav>
+
+@code {
+    /// <summary>Disparado ao escolher um item final (usado para fechar o menu no celular).</summary>
+    [Parameter] public EventCallback OnNavegou { get; set; }
+
+    // Até o menu da CH_MENU carregar (ou se falhar), mostra só o "Encerrar".
+    private IReadOnlyList<MenuItem> Itens = [MenuConfig.Encerrar];
+    private bool carregando = true;
+    private string? erro;
+    private readonly HashSet<string> abertos = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += AoMudarRota;
+        Menu.Alterado += AoAlterarMenu;
+        await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        carregando = true;
+        erro = null;
+        try
+        {
+            Itens = await Menu.ObterAsync();
+            AbrirCaminhoAtivo();
+        }
+        catch (Exception ex)
+        {
+            Itens = [MenuConfig.Encerrar];
+            erro = $"Não foi possível carregar o menu: {ex.Message}";
+        }
+        finally
+        {
+            carregando = false;
+        }
+    }
+
+    private void AoAlterarMenu() => InvokeAsync(async () =>
+    {
+        await CarregarAsync();
+        StateHasChanged();
+    });
+
+    private RenderFragment RenderItem(MenuItem item, int nivel) => __builder =>
+    {
+        var aberto = abertos.Contains(item.Id);
+        var ativo = EstaAtivo(item);
+
+        <li class="tree-item" role="treeitem" aria-expanded="@(item.EhPasta ? aberto : null)" @key="item.Id">
+            <button type="button" id="@item.Id" title="@(item.EhPasta || item.Rota is not null || item.Acao != MenuAcao.Navegar ? item.Id : $"{item.Id} (sem tela vinculada)")"
+                    class="tree-node @(ativo ? "ativo" : null) @(item.EhPasta ? "pasta" : null) @(item.Acao == MenuAcao.Encerrar ? "sair" : null)"
+                    style="--nivel:@nivel" @onclick="() => ClicarAsync(item)">
+                <span class="tree-chevron">
+                    @if (item.EhPasta)
+                    {
+                        <i class="bi @(aberto ? "bi-chevron-down" : "bi-chevron-right")"></i>
+                    }
+                </span>
+                @if (item.Icone is not null)
+                {
+                    <i class="bi @(item.EhPasta && aberto ? item.Icone + "-open" : item.Icone) tree-icon"></i>
+                }
+                <span class="tree-text">@item.Texto</span>
+            </button>
+
+            @if (item.EhPasta && aberto)
+            {
+                <ul class="tree-list tree-children" role="group">
+                    @foreach (var filho in item.Filhos!)
+                    {
+                        @RenderItem(filho, nivel + 1)
+                    }
+                </ul>
+            }
+        </li>
+    };
+
+    private async Task ClicarAsync(MenuItem item)
+    {
+        if (item.EhPasta)
+        {
+            if (!abertos.Remove(item.Id)) abertos.Add(item.Id);
+            return;
+        }
+
+        if (item.Acao == MenuAcao.Encerrar)
+        {
+            await Auth.SairAsync();
+            Nav.NavigateTo("login");
+        }
+        else if (item.Rota is not null)
+        {
+            Nav.NavigateTo(item.Rota);
+        }
+
+        await OnNavegou.InvokeAsync();
+    }
+
+    private string RotaAtual => Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0];
+
+    private bool EstaAtivo(MenuItem item) =>
+        !item.EhPasta && item.Rota is not null &&
+        (RotaAtual.Equals(item.Rota, StringComparison.OrdinalIgnoreCase) ||
+         RotaAtual.StartsWith(item.Rota + "/", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Expande as pastas que contêm a página atual.</summary>
+    private void AbrirCaminhoAtivo()
+    {
+        bool Visitar(MenuItem item)
+        {
+            if (!item.EhPasta) return EstaAtivo(item);
+            var contem = false;
+            foreach (var f in item.Filhos!) contem |= Visitar(f);
+            if (contem) abertos.Add(item.Id);
+            return contem;
+        }
+
+        foreach (var item in Itens) Visitar(item);
+    }
+
+    private void AoMudarRota(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        AbrirCaminhoAtivo();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= AoMudarRota;
+        Menu.Alterado -= AoAlterarMenu;
+    }
+}

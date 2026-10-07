@@ -1,0 +1,119 @@
+@page "/cadastros/grupos"
+@inject GruposApi Api
+@inject ProjetosApi ProjetosApi
+@inject ProjetoAtual ProjetoAtual
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Grupos · Chamados</PageTitle>
+
+<div class="ui-page">
+    <div class="ui-page-title">
+        <h1>Grupos</h1>
+    </div>
+
+    @if (erro is not null)
+    {
+        <UiAlert>@erro</UiAlert>
+    }
+
+    <SectionCard Title="Cadastro de Grupos" Icon="bi-collection">
+        <DataGrid TItem="GrupoDto" Items="grupos" Loading="carregando" OnRowClick="Editar"
+                  EmptyText="Nenhum grupo cadastrado.">
+            <Toolbar>
+                <button class="ui-btn ui-btn-primary" @onclick="Inserir">
+                    <i class="bi bi-plus-lg"></i> Inserir grupo
+                </button>
+                <label class="d-flex align-items-center gap-2" title="Projeto (CH_PROJETO_GRUPO)">
+                    <i class="bi bi-kanban"></i>
+                    <select class="ui-select ui-select-auto" value="@(filtro?.ToString() ?? Todos)" @onchange="Filtrar">
+                        <option value="@Todos">Todos os projetos</option>
+                        @foreach (var p in projetos)
+                        {
+                            <option value="@p.Id">@p.Id - @p.Nome@(p.Id == ProjetoAtual.Id ? " (este sistema)" : null)</option>
+                        }
+                    </select>
+                </label>
+            </Toolbar>
+            <RowActions Context="g">
+                <IconButton Icon="bi-pencil-square" Title="Editar" OnClick="() => Editar(g)" />
+                <IconButton Icon="bi-people" Title="Usuários do grupo" OnClick="() => Usuarios(g)" />
+                <IconButton Icon="bi-diagram-3" Title="Menus do grupo" OnClick="() => Menus(g)" />
+                <IconButton Icon="bi-x-lg" Title="Excluir" Variant="UiVariant.Danger" OnClick="() => ExcluirAsync(g)" />
+            </RowActions>
+            <Columns>
+                <GridColumn TItem="GrupoDto" Title="Código" Field="g => g.Id" Align="end" Width="90px" />
+                <GridColumn TItem="GrupoDto" Title="Nome" Field="g => g.Nome" />
+                <GridColumn TItem="GrupoDto" Title="Projeto" Field="ProjetoTexto" />
+                <GridColumn TItem="GrupoDto" Title="Usuários" Field="g => g.Usuarios" Align="end" Width="110px" />
+            </Columns>
+        </DataGrid>
+    </SectionCard>
+</div>
+
+@code {
+    private const string Todos = "todos";
+
+    /// <summary>?projeto=N filtra pelo projeto; ?projeto=todos mostra tudo; sem ele, o projeto deste sistema.</summary>
+    [SupplyParameterFromQuery(Name = "projeto")] public string? ProjetoQuery { get; set; }
+
+    private long? filtro;
+    private List<GrupoDto> grupos = [];
+    private List<ProjetoDto> projetos = [];
+    private bool carregando = true;
+    private string? erro;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        filtro = ProjetoQuery == Todos ? null
+            : long.TryParse(ProjetoQuery, out var p) ? p
+            : ProjetoAtual.Id;
+
+        carregando = true;
+        erro = null;
+        try
+        {
+            if (projetos.Count == 0) projetos = await ProjetosApi.ListarAsync();
+            grupos = await Api.ListarAsync(filtro);
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível carregar os grupos: {ex.Message}";
+        }
+        finally
+        {
+            carregando = false;
+        }
+    }
+
+    private void Filtrar(ChangeEventArgs e) => Nav.NavigateTo($"cadastros/grupos?projeto={e.Value}");
+
+    private void Inserir() =>
+        Nav.NavigateTo(filtro is null ? "cadastros/grupos/novo" : $"cadastros/grupos/novo?projeto={filtro}");
+
+    private static object? ProjetoTexto(GrupoDto g) =>
+        g.Projeto is null ? null : $"{g.Projeto} - {g.ProjetoNome}";
+
+    private void Editar(GrupoDto g) => Nav.NavigateTo($"cadastros/grupos/editar?id={g.Id}");
+
+    private void Usuarios(GrupoDto g) => Nav.NavigateTo($"cadastros/usuarios-grupos?projeto={g.Projeto}&grupo={g.Id}");
+
+    private void Menus(GrupoDto g) => Nav.NavigateTo($"cadastros/grupos-menus?projeto={g.Projeto}&grupo={g.Id}");
+
+    private async Task ExcluirAsync(GrupoDto g)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Excluir o grupo {g.Id} - {g.Nome}?")) return;
+
+        erro = null;
+        try
+        {
+            var erros = await Api.ExcluirAsync(g.Id!.Value);
+            if (erros.Count == 0) grupos.Remove(g);
+            else erro = string.Join(" ", erros.Values.SelectMany(x => x));
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível excluir: {ex.Message}";
+        }
+    }
+}

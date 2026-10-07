@@ -1,0 +1,126 @@
+@page "/cadastros/menus"
+@inject MenusApi Api
+@inject ProjetosApi ProjetosApi
+@inject ProjetoAtual ProjetoAtual
+@inject MenuLateralService MenuLateral
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Menus · Chamados</PageTitle>
+
+<div class="ui-page">
+    <div class="ui-page-title">
+        <h1>Menus</h1>
+    </div>
+
+    @if (erro is not null)
+    {
+        <UiAlert>@erro</UiAlert>
+    }
+
+    <SectionCard Title="Cadastro de Menus" Icon="bi-list-nested">
+        <Legend Items="@([("Item principal", UiVariant.Primary), ("Submenu", UiVariant.Neutral)])" />
+
+        <DataGrid TItem="MenuDto" Items="menus" Loading="carregando" OnRowClick="Editar"
+                  EmptyText="Nenhum menu cadastrado.">
+            <Toolbar>
+                <button class="ui-btn ui-btn-primary" @onclick="Inserir">
+                    <i class="bi bi-plus-lg"></i> Inserir menu
+                </button>
+                <label class="d-flex align-items-center gap-2" title="Projeto (MN_PROJETO)">
+                    <i class="bi bi-kanban"></i>
+                    <select class="ui-select ui-select-auto" value="@(filtro?.ToString() ?? Todos)" @onchange="Filtrar">
+                        <option value="@Todos">Todos os projetos</option>
+                        @foreach (var p in projetos)
+                        {
+                            <option value="@p.Id">@p.Id - @p.Nome@(p.Id == ProjetoAtual.Id ? " (este sistema)" : null)</option>
+                        }
+                    </select>
+                </label>
+            </Toolbar>
+            <RowActions Context="m">
+                <IconButton Icon="bi-pencil-square" Title="Editar" OnClick="() => Editar(m)" />
+                <IconButton Icon="bi-x-lg" Title="Excluir" Variant="UiVariant.Danger" OnClick="() => ExcluirAsync(m)" />
+                <span class="ui-dot ms-1 align-self-center @(m.Depende is null ? "ui-dot-primary" : null)"></span>
+            </RowActions>
+            <Columns>
+                <GridColumn TItem="MenuDto" Title="Código" Field="m => m.Id" Align="end" Width="90px" />
+                <GridColumn TItem="MenuDto" Title="Nome" Field="m => m.Nome" />
+                <GridColumn TItem="MenuDto" Title="Label" Field="m => m.Label" />
+                <GridColumn TItem="MenuDto" Title="Depende de" Field="DependeTexto" />
+                <GridColumn TItem="MenuDto" Title="Ordem" Field="m => m.Ordem" Align="end" Width="90px" />
+                <GridColumn TItem="MenuDto" Title="Projeto" Field="ProjetoTexto" />
+            </Columns>
+        </DataGrid>
+    </SectionCard>
+</div>
+
+@code {
+    private const string Todos = "todos";
+
+    /// <summary>?projeto=N filtra pelo MN_PROJETO; ?projeto=todos mostra tudo; sem ele, o projeto deste sistema.</summary>
+    [SupplyParameterFromQuery(Name = "projeto")] public string? ProjetoQuery { get; set; }
+
+    private long? filtro;
+    private List<MenuDto> menus = [];
+    private List<ProjetoDto> projetos = [];
+    private bool carregando = true;
+    private string? erro;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        filtro = ProjetoQuery == Todos ? null
+            : long.TryParse(ProjetoQuery, out var p) ? p
+            : ProjetoAtual.Id;
+
+        carregando = true;
+        erro = null;
+        try
+        {
+            if (projetos.Count == 0) projetos = await ProjetosApi.ListarAsync();
+            menus = await Api.ListarAsync(filtro);
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível carregar os menus: {ex.Message}";
+        }
+        finally
+        {
+            carregando = false;
+        }
+    }
+
+    private void Filtrar(ChangeEventArgs e) => Nav.NavigateTo($"cadastros/menus?projeto={e.Value}");
+
+    private void Inserir() =>
+        Nav.NavigateTo(filtro is null ? "cadastros/menus/novo" : $"cadastros/menus/novo?projeto={filtro}");
+
+    private static object? DependeTexto(MenuDto m) =>
+        m.Depende is null ? null : $"{m.Depende} - {m.DependeLabel}";
+
+    private static object? ProjetoTexto(MenuDto m) =>
+        m.Projeto is null ? null : $"{m.Projeto} - {m.ProjetoNome}";
+
+    private void Editar(MenuDto m) => Nav.NavigateTo($"cadastros/menus/editar?id={m.Id}");
+
+    private async Task ExcluirAsync(MenuDto m)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Excluir o menu {m.Id} - {m.Label}?")) return;
+
+        erro = null;
+        try
+        {
+            var erros = await Api.ExcluirAsync(m.Id!.Value);
+            if (erros.Count == 0)
+            {
+                menus.Remove(m);
+                MenuLateral.Recarregar();
+            }
+            else erro = string.Join(" ", erros.Values.SelectMany(x => x));
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível excluir: {ex.Message}";
+        }
+    }
+}

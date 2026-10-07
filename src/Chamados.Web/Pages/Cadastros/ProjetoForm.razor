@@ -1,0 +1,183 @@
+@page "/cadastros/projetos/novo"
+@page "/cadastros/projetos/editar"
+@inject ProjetosApi Api
+@inject MenusApi MenusApi
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(Novo ? "Novo projeto" : "Projeto") · Chamados</PageTitle>
+
+@if (carregando)
+{
+    <UiAlert Variant="UiVariant.Info" Icon="bi-hourglass-split">Carregando...</UiAlert>
+}
+else if (naoEncontrado)
+{
+    <UiAlert>Projeto não encontrado. <a href="cadastros/projetos">Voltar à lista</a></UiAlert>
+}
+else
+{
+    <EditForm EditContext="editContext" OnValidSubmit="SalvarAsync" class="ui-page">
+        <DataAnnotationsValidator />
+
+        <FormHeader Caption="Projeto" Number="@(Novo ? "NOVO" : model.Id.ToString())">
+            <ChildContent>
+                <HeaderField Label="Nome" Value="@model.Nome.ToUpperInvariant()" />
+            </ChildContent>
+            <Aside>
+                <KeyValueList Items="@([("Tabela", "CH_PROJETOS"), ("Menus", menus.Count.ToString())])">
+                    <dt>Status</dt>
+                    <dd><StatusPill Text="@(Novo ? "Inclusão" : "Alteração")" Dot="true" /></dd>
+                </KeyValueList>
+            </Aside>
+        </FormHeader>
+
+        @if (erroGeral is not null)
+        {
+            <UiAlert>@erroGeral</UiAlert>
+        }
+
+        <SectionCard Title="Informações Gerais" Icon="bi-grid-fill">
+            <FormRow Label="Código" For="id">
+                <input id="id" class="ui-input" style="max-width:140px" readonly tabindex="-1"
+                       value="@model.Id" placeholder="Gerado ao salvar" />
+            </FormRow>
+            <FormRow Label="Nome" Required="true" For="nome">
+                <InputText id="nome" class="ui-input ui-upper" @bind-Value="model.Nome" placeholder="Nome do projeto" />
+                <ValidationMessage For="() => model.Nome" />
+            </FormRow>
+        </SectionCard>
+
+        @if (!Novo)
+        {
+            <SectionCard Title="Menus do projeto" Icon="bi-list-nested">
+                <DataGrid TItem="MenuDto" Items="menus" Searchable="false" ShowFooter="false"
+                          EmptyText="Nenhum menu vinculado a este projeto." OnRowClick="AbrirMenu">
+                    <Columns>
+                        <GridColumn TItem="MenuDto" Title="Código" Field="m => m.Id" Align="end" Width="90px" />
+                        <GridColumn TItem="MenuDto" Title="Nome" Field="m => m.Nome" />
+                        <GridColumn TItem="MenuDto" Title="Label" Field="m => m.Label" />
+                    </Columns>
+                </DataGrid>
+            </SectionCard>
+        }
+
+        <div class="d-flex justify-content-between gap-2 flex-wrap">
+            <div>
+                @if (!Novo)
+                {
+                    <button type="button" class="ui-btn ui-btn-danger" @onclick="ExcluirAsync" disabled="@salvando">
+                        <i class="bi bi-trash"></i> Excluir
+                    </button>
+                }
+            </div>
+            <div class="d-flex gap-2">
+                <a class="ui-btn ui-btn-outline text-decoration-none" href="cadastros/projetos">Cancelar</a>
+                <button type="submit" class="ui-btn ui-btn-primary" disabled="@salvando">
+                    <i class="bi bi-check-lg"></i> @(salvando ? "Salvando..." : "Salvar")
+                </button>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [SupplyParameterFromQuery] public long? Id { get; set; }
+
+    private bool Novo => Id is null;
+
+    private ProjetoDto model = new();
+    private List<MenuDto> menus = [];
+    private EditContext editContext = null!;
+    private ValidationMessageStore mensagens = null!;
+    private bool carregando = true, naoEncontrado, salvando;
+    private string? erroGeral;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        carregando = true;
+        naoEncontrado = false;
+        erroGeral = null;
+        model = new ProjetoDto();
+        menus = [];
+
+        try
+        {
+            if (!Novo)
+            {
+                var p = await Api.ObterAsync(Id!.Value);
+                if (p is null) naoEncontrado = true;
+                else
+                {
+                    model = new ProjetoDto { Id = p.Id, Nome = p.Nome };
+                    menus = await MenusApi.ListarAsync(p.Id);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            erroGeral = $"Não foi possível carregar: {ex.Message}";
+        }
+
+        editContext = new EditContext(model);
+        mensagens = new ValidationMessageStore(editContext);
+        editContext.OnValidationRequested += (_, _) => mensagens.Clear();
+        editContext.OnFieldChanged += (_, e) => mensagens.Clear(e.FieldIdentifier);
+        carregando = false;
+    }
+
+    private async Task SalvarAsync()
+    {
+        erroGeral = null;
+        salvando = true;
+        try
+        {
+            var envio = new ProjetoDto { Id = model.Id, Nome = model.Nome };
+            envio.Normalizar();
+
+            var (_, erros) = await Api.SalvarAsync(envio);
+            if (erros.Count == 0)
+            {
+                Nav.NavigateTo("cadastros/projetos");
+                return;
+            }
+            MostrarErros(erros);
+        }
+        catch (Exception ex)
+        {
+            erroGeral = $"Não foi possível salvar: {ex.Message}";
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+
+    private async Task ExcluirAsync()
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Excluir o projeto {model.Id} - {model.Nome}?")) return;
+        try
+        {
+            var erros = await Api.ExcluirAsync(model.Id!.Value);
+            if (erros.Count == 0) Nav.NavigateTo("cadastros/projetos");
+            else MostrarErros(erros);
+        }
+        catch (Exception ex)
+        {
+            erroGeral = $"Não foi possível excluir: {ex.Message}";
+        }
+    }
+
+    private void AbrirMenu(MenuDto m) => Nav.NavigateTo($"cadastros/menus/editar?id={m.Id}");
+
+    private void MostrarErros(IDictionary<string, string[]> erros)
+    {
+        foreach (var (campo, msgs) in erros)
+        {
+            if (campo.TrimStart('$', '.').Equals(nameof(ProjetoDto.Nome), StringComparison.OrdinalIgnoreCase))
+                foreach (var m in msgs) mensagens.Add(editContext.Field(nameof(ProjetoDto.Nome)), m);
+            else erroGeral = string.Join(" ", msgs);
+        }
+        editContext.NotifyValidationStateChanged();
+    }
+}

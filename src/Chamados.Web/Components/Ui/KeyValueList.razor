@@ -1,0 +1,16 @@
+@* Lista chave/valor compacta (ex.: Status, DDR, Validade, Cadastro). *@
+<dl class="ui-kv mb-0">
+    @ChildContent
+    @foreach (var (chave, valor) in Items)
+    {
+        <dt>@chave</dt>
+        <dd>@valor</dd>
+    }
+</dl>
+
+@code {
+    [Parameter] public IEnumerable<(string Chave, string? Valor)> Items { get; set; } = [];
+
+    /// <summary>Para valores ricos: &lt;dt&gt;Status&lt;/dt&gt;&lt;dd&gt;&lt;StatusPill .../&gt;&lt;/dd&gt;</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

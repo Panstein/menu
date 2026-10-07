@@ -1,0 +1,59 @@
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 46px;
+    padding: 0 16px;
+    background: #1e2a3b;
+    color: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+}
+
+.brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+    .brand .bi { color: #7fb0ff; }
+
+.toggler {
+    display: block;
+    cursor: pointer;
+    background: none;
+    border: 0;
+    padding: 0 4px;
+    color: #fff;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.user {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #c8d3e3;
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 0;
+}
+
+    .user > .bi { font-size: 16px; color: #7fb0ff; }
+
+.user-name {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+    .user-name { display: none; }
+}

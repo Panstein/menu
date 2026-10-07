@@ -1,0 +1,33 @@
+@inherits LayoutComponentBase
+@inject IJSRuntime JS
+
+<div class="app">
+    <NavMenu OnToggleMenu="() => menuAberto = !menuAberto" />
+
+    <div class="app-body">
+        <aside class="sidebar @(menuAberto ? null : "fechado")">
+            <TreeMenu OnNavegou="AoNavegarAsync" />
+        </aside>
+
+        @if (menuAberto)
+        {
+            <div class="sidebar-backdrop" @onclick="() => menuAberto = false"></div>
+        }
+
+        <main class="app-content">
+            @Body
+        </main>
+    </div>
+</div>
+
+@code {
+    // O menu inicia exibido; o botão ☰ da barra superior esconde/mostra.
+    private bool menuAberto = true;
+
+    // No celular o menu fica sobre o conteúdo: fecha após escolher um item.
+    private async Task AoNavegarAsync()
+    {
+        if (await JS.InvokeAsync<bool>("chamados.telaEstreita"))
+            menuAberto = false;
+    }
+}

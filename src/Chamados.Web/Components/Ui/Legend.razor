@@ -1,0 +1,13 @@
+@* Legenda de cores: Items = [("Movimento Efetivo", UiVariant.Success), ...] *@
+<div class="ui-legend">
+    @foreach (var (texto, variante) in Items)
+    {
+        <span class="ui-legend-item">
+            <span class="ui-dot @variante.Css("ui-dot")"></span>@texto
+        </span>
+    }
+</div>
+
+@code {
+    [Parameter] public IEnumerable<(string Texto, UiVariant Variante)> Items { get; set; } = [];
+}

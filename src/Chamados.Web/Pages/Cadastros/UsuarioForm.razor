@@ -1,0 +1,293 @@
+@page "/cadastros/usuarios/novo"
+@page "/cadastros/usuarios/editar"
+@inject UsuariosApi Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(Novo ? "Novo usuário" : "Usuário") · Chamados</PageTitle>
+
+@if (carregando)
+{
+    <UiAlert Variant="UiVariant.Info" Icon="bi-hourglass-split">Carregando...</UiAlert>
+}
+else if (naoEncontrado)
+{
+    <UiAlert>Usuário não encontrado. <a href="cadastros/usuarios">Voltar à lista</a></UiAlert>
+}
+else
+{
+    <EditForm EditContext="editContext" OnValidSubmit="SalvarAsync" class="ui-page">
+        <DataAnnotationsValidator />
+
+        <FormHeader Caption="Usuário" Number="@(Novo ? "NOVO" : Iniciais(model.Nome))">
+            <ChildContent>
+                <HeaderField Label="Nome" Value="@model.Nome.ToUpperInvariant()" />
+                <HeaderField Label="E-mail" Value="@model.Email.Trim()" />
+                <HeaderField Label="CPF" Value="@model.Cpf?.ToUpperInvariant()" />
+                <HeaderField Label="Superusuário">
+                    @if (model.SuperUsuario)
+                    {
+                        <StatusPill Text="Sim" Variant="UiVariant.Success" />
+                    }
+                    else
+                    {
+                        <StatusPill Text="Não" Variant="UiVariant.Warning" />
+                    }
+                </HeaderField>
+            </ChildContent>
+            <Aside>
+                @if (!model.SuperUsuario)
+                {
+                    <UiAlert Variant="UiVariant.Warning">Sem acesso ao sistema</UiAlert>
+                }
+                <KeyValueList Items="@([("Tabela", "CH_USER")])">
+                    <dt>Status</dt>
+                    <dd><StatusPill Text="@(Novo ? "Inclusão" : "Alteração")" Dot="true" /></dd>
+                </KeyValueList>
+            </Aside>
+        </FormHeader>
+
+        @if (erroGeral is not null)
+        {
+            <UiAlert>@erroGeral</UiAlert>
+        }
+
+        <div class="ui-grid-2">
+            <SectionCard Title="Informações Gerais" Icon="bi-grid-fill">
+                <FormRow Label="Código" For="id">
+                    <input id="id" class="ui-input" style="max-width:140px" readonly tabindex="-1"
+                           value="@model.Id" placeholder="Gerado ao salvar" />
+                </FormRow>
+                <FormRow Label="E-mail" Required="true" For="email">
+                    <InputText id="email" class="ui-input" @bind-Value="model.Email" maxlength="50"
+                               readonly="@(!Novo)" autocomplete="off" @onfocusout="VerificarEmailAsync" />
+                    <ValidationMessage For="() => model.Email" />
+                    @if (verificandoEmail)
+                    {
+                        <div class="ui-help text-start">Verificando e-mail...</div>
+                    }
+                </FormRow>
+                <FormRow Label="Nome" Required="true" For="nome">
+                    <InputText id="nome" class="ui-input ui-upper" @bind-Value="model.Nome" maxlength="40" />
+                    <ValidationMessage For="() => model.Nome" />
+                </FormRow>
+                <FormRow Label="CPF" For="cpf">
+                    <InputText id="cpf" class="ui-input ui-upper" style="max-width:180px" @bind-Value="model.Cpf" maxlength="20" />
+                    <ValidationMessage For="() => model.Cpf" />
+                </FormRow>
+            </SectionCard>
+
+            <SectionCard Title="Acesso" Icon="bi-shield-lock-fill">
+                <FormRow Label="Senha" Required="@Novo" For="senha">
+                    <input id="senha" type="password" class="ui-input @CssCampo(nameof(UsuarioDto.Senha))" maxlength="16"
+                           @bind="model.Senha" @bind:event="oninput" @bind:after="() => Mudou(nameof(UsuarioDto.Senha))"
+                           placeholder="@(Novo ? null : "Deixe em branco para manter a atual")" autocomplete="new-password" />
+                    <ValidationMessage For="() => model.Senha" />
+                </FormRow>
+                <FormRow Label="Confirmar senha" Required="@Novo" For="senha2">
+                    <input id="senha2" type="password" class="ui-input @CssCampo(nameof(UsuarioDto.ConfirmacaoSenha))" maxlength="16"
+                           @bind="model.ConfirmacaoSenha" @bind:event="oninput" @bind:after="() => Mudou(nameof(UsuarioDto.ConfirmacaoSenha))"
+                           autocomplete="new-password" />
+                    <ValidationMessage For="() => model.ConfirmacaoSenha" />
+                    @if (SenhasConferem)
+                    {
+                        <div class="ui-ok-message"><i class="bi bi-check-circle-fill"></i> As senhas conferem.</div>
+                    }
+                </FormRow>
+                <FormRow Label="Superusuário" For="super">
+                    <label class="ui-check">
+                        <InputCheckbox id="super" @bind-Value="model.SuperUsuario" /> Sim
+                    </label>
+                    <ValidationMessage For="() => model.SuperUsuario" />
+                </FormRow>
+                <InfoCallout Icon="bi-info-circle-fill" Title="Regras">
+                    Os dados são gravados em MAIÚSCULAS (exceto o e-mail). Só superusuários conseguem entrar no sistema.
+                </InfoCallout>
+            </SectionCard>
+        </div>
+
+        <div class="d-flex justify-content-between gap-2 flex-wrap">
+            <div>
+                @if (!Novo)
+                {
+                    <button type="button" class="ui-btn ui-btn-danger" @onclick="ExcluirAsync" disabled="@salvando">
+                        <i class="bi bi-trash"></i> Excluir
+                    </button>
+                }
+            </div>
+            <div class="d-flex gap-2">
+                <a class="ui-btn ui-btn-outline text-decoration-none" href="cadastros/usuarios">Cancelar</a>
+                <button type="submit" class="ui-btn ui-btn-primary" disabled="@salvando">
+                    <i class="bi bi-check-lg"></i> @(salvando ? "Salvando..." : "Salvar")
+                </button>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [SupplyParameterFromQuery] public string? Email { get; set; }
+
+    private bool Novo => string.IsNullOrEmpty(Email);
+
+    private UsuarioDto model = new();
+    private EditContext editContext = null!;
+    private ValidationMessageStore mensagens = null!;
+    private bool carregando = true, naoEncontrado, salvando, verificandoEmail;
+    private string? erroGeral;
+    private string? ultimoEmailVerificado;
+
+    private bool SenhasConferem =>
+        !string.IsNullOrEmpty(model.Senha) && !string.IsNullOrEmpty(model.ConfirmacaoSenha) &&
+        string.Equals(model.Senha, model.ConfirmacaoSenha, StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        carregando = true;
+        naoEncontrado = false;
+        erroGeral = null;
+        model = new UsuarioDto();
+
+        if (!Novo)
+        {
+            try
+            {
+                var u = await Api.ObterAsync(Email!);
+                if (u is null) naoEncontrado = true; else model = u;
+            }
+            catch (Exception ex)
+            {
+                erroGeral = $"Não foi possível carregar: {ex.Message}";
+            }
+        }
+
+        editContext = new EditContext(model);
+        mensagens = new ValidationMessageStore(editContext);
+        editContext.OnValidationRequested += (_, _) => mensagens.Clear();
+        editContext.OnFieldChanged += (_, e) =>
+        {
+            mensagens.Clear(e.FieldIdentifier);
+            // mudar a senha reavalia a confirmação
+            if (e.FieldIdentifier.FieldName == nameof(UsuarioDto.Senha))
+                mensagens.Clear(editContext.Field(nameof(UsuarioDto.ConfirmacaoSenha)));
+        };
+        carregando = false;
+    }
+
+    /// <summary>Crítica de duplicidade ao sair do campo e-mail (inclusão).</summary>
+    private async Task VerificarEmailAsync()
+    {
+        var email = model.Email.Trim();
+        if (!Novo || string.IsNullOrEmpty(email) || email.Equals(ultimoEmailVerificado, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        ultimoEmailVerificado = email;
+        verificandoEmail = true;
+        try
+        {
+            if (await Api.ExisteAsync(email))
+                Erro(nameof(UsuarioDto.Email), "Já existe um usuário cadastrado com este e-mail.");
+        }
+        catch
+        {
+            // a API repete a crítica ao salvar
+        }
+        finally
+        {
+            verificandoEmail = false;
+        }
+    }
+
+    private async Task SalvarAsync()
+    {
+        erroGeral = null;
+
+        // Duplo check da senha
+        if (Novo && string.IsNullOrEmpty(model.Senha))
+        {
+            Erro(nameof(UsuarioDto.Senha), "Informe a senha.");
+            return;
+        }
+        if (!string.IsNullOrEmpty(model.Senha) || !string.IsNullOrEmpty(model.ConfirmacaoSenha))
+        {
+            if (string.IsNullOrEmpty(model.ConfirmacaoSenha))
+            {
+                Erro(nameof(UsuarioDto.ConfirmacaoSenha), "Repita a senha para confirmar.");
+                return;
+            }
+            if (!SenhasConferem)
+            {
+                Erro(nameof(UsuarioDto.ConfirmacaoSenha), "A confirmação não confere com a senha.");
+                return;
+            }
+        }
+
+        salvando = true;
+        try
+        {
+            var envio = new UsuarioDto
+            {
+                Email = model.Email, Nome = model.Nome, Cpf = model.Cpf, SuperUsuario = model.SuperUsuario,
+                Senha = model.Senha, ConfirmacaoSenha = model.ConfirmacaoSenha
+            };
+            envio.Normalizar();
+
+            var erros = await Api.SalvarAsync(envio, Novo ? null : Email);
+            if (erros.Count == 0)
+            {
+                Nav.NavigateTo("cadastros/usuarios");
+                return;
+            }
+            MostrarErros(erros);
+        }
+        catch (Exception ex)
+        {
+            erroGeral = $"Não foi possível salvar: {ex.Message}";
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+
+    private async Task ExcluirAsync()
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Excluir o usuário {model.Nome}?")) return;
+        try
+        {
+            var erros = await Api.ExcluirAsync(Email!);
+            if (erros.Count == 0) Nav.NavigateTo("cadastros/usuarios");
+            else MostrarErros(erros);
+        }
+        catch (Exception ex)
+        {
+            erroGeral = $"Não foi possível excluir: {ex.Message}";
+        }
+    }
+
+    private void MostrarErros(IDictionary<string, string[]> erros)
+    {
+        foreach (var (campo, msgs) in erros)
+        {
+            var prop = typeof(UsuarioDto).GetProperties()
+                .FirstOrDefault(p => p.Name.Equals(campo.TrimStart('$', '.'), StringComparison.OrdinalIgnoreCase));
+            if (prop is null) erroGeral = string.Join(" ", msgs);
+            else foreach (var m in msgs) Erro(prop.Name, m);
+        }
+    }
+
+    // Campos de senha usam <input> com atualização a cada tecla: avisa o EditContext manualmente.
+    private void Mudou(string campo) => editContext.NotifyFieldChanged(editContext.Field(campo));
+
+    private string? CssCampo(string campo) =>
+        editContext.GetValidationMessages(editContext.Field(campo)).Any() ? "invalid" : null;
+
+    private void Erro(string campo, string mensagem)
+    {
+        mensagens.Add(editContext.Field(campo), mensagem);
+        editContext.NotifyValidationStateChanged();
+    }
+
+    private static string Iniciais(string nome) =>
+        string.Concat(nome.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
+}

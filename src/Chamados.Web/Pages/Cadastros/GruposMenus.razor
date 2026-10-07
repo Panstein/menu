@@ -1,0 +1,306 @@
+@page "/cadastros/grupos-menus"
+@inject GruposApi GruposApi
+@inject MenusApi MenusApi
+@inject ProjetosApi ProjetosApi
+@inject ProjetoAtual ProjetoAtual
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Grupos x Menus · Chamados</PageTitle>
+
+<div class="ui-page">
+    <div class="ui-page-title">
+        <h1>Grupos x Menus</h1>
+    </div>
+
+    @if (erro is not null)
+    {
+        <UiAlert>@erro</UiAlert>
+    }
+    @if (sucesso is not null)
+    {
+        <UiAlert Variant="UiVariant.Success" Icon="bi-check-circle">@sucesso</UiAlert>
+    }
+
+    <SectionCard Title="Grupo" Icon="bi-person-lock">
+        <FormRow Label="Projeto" Required="true" For="projeto">
+            <select id="projeto" class="ui-select" value="@ProjetoSelecionado"
+                    @onchange="e => TrocarAsync(e.Value?.ToString(), null)" disabled="@salvando">
+                @foreach (var p in projetos)
+                {
+                    <option value="@p.Id">@p.Id - @p.Nome@(p.Id == ProjetoAtual.Id ? " (este sistema)" : null)</option>
+                }
+            </select>
+        </FormRow>
+        <FormRow Label="Grupo" Required="true" For="grupo">
+            <select id="grupo" class="ui-select" value="@(Grupo?.ToString() ?? "")"
+                    @onchange="e => TrocarAsync(ProjetoSelecionado.ToString(), e.Value?.ToString())" disabled="@salvando">
+                <option value="">Selecione o grupo...</option>
+                @foreach (var g in grupos)
+                {
+                    <option value="@g.Id">@g.Id - @g.Nome</option>
+                }
+            </select>
+        </FormRow>
+        @if (!carregando && grupos.Count == 0)
+        {
+            <div class="ui-help text-start">
+                Nenhum grupo cadastrado neste projeto. <a href="@($"cadastros/grupos/novo?projeto={ProjetoSelecionado}")">Cadastrar grupo</a>
+            </div>
+        }
+    </SectionCard>
+
+    @if (Grupo is not null)
+    {
+        <SectionCard Title="Menus que o grupo acessa" Icon="bi-diagram-3-fill">
+            <div class="d-flex gap-2 flex-wrap mb-2">
+                <button class="ui-btn ui-btn-outline" @onclick="() => MarcarTodos(true)" disabled="@(salvando || arvore.Count == 0)">
+                    <i class="bi bi-check2-all"></i> Marcar todos
+                </button>
+                <button class="ui-btn ui-btn-outline" @onclick="() => MarcarTodos(false)" disabled="@(salvando || arvore.Count == 0)">
+                    <i class="bi bi-x-square"></i> Desmarcar todos
+                </button>
+            </div>
+
+            @if (carregandoMenus)
+            {
+                <UiAlert Variant="UiVariant.Info" Icon="bi-hourglass-split">Carregando menus...</UiAlert>
+            }
+            else if (arvore.Count == 0)
+            {
+                <UiAlert Variant="UiVariant.Info" Icon="bi-info-circle">Nenhum menu cadastrado neste projeto.</UiAlert>
+            }
+            else
+            {
+                <ul class="gm-tree" role="tree">
+                    @foreach (var no in arvore)
+                    {
+                        @RenderNo(no, 0)
+                    }
+                </ul>
+            }
+            <div class="ui-help text-start mt-2">
+                Marcar um item marca também as pastas acima dele e os itens abaixo; desmarcar uma pasta desmarca os itens dentro dela.
+            </div>
+        </SectionCard>
+
+        <div class="d-flex justify-content-between gap-2 flex-wrap align-items-center">
+            <div class="ui-help text-start">
+                @marcados.Count menu(s) marcado(s)@(Alterado ? $" · {Incluir} a incluir, {Remover} a remover (não salvo)" : null)
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="ui-btn ui-btn-outline" @onclick="Descartar" disabled="@(salvando || !Alterado)">
+                    Descartar
+                </button>
+                <button type="button" class="ui-btn ui-btn-primary" @onclick="SalvarAsync" disabled="@(salvando || !Alterado)">
+                    <i class="bi bi-check-lg"></i> @(salvando ? "Salvando..." : "Salvar")
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private enum Estado { Vazio, Parcial, Marcado }
+
+    /// <summary>?projeto=N: grupos e menus daquele projeto; sem ele, o projeto do grupo informado ou o deste sistema.</summary>
+    [SupplyParameterFromQuery(Name = "projeto")] public long? ProjetoQuery { get; set; }
+
+    /// <summary>?grupo=N já abre com o grupo selecionado.</summary>
+    [SupplyParameterFromQuery(Name = "grupo")] public long? GrupoQuery { get; set; }
+
+    private long ProjetoSelecionado;
+    private long? Grupo;
+    private long? projetoCarregado;
+    private List<GrupoDto> grupos = [];
+    private List<ProjetoDto> projetos = [];
+    private List<MenuNo> arvore = [];
+    private readonly Dictionary<long, MenuNo> nos = [];
+    private readonly Dictionary<long, long?> pais = [];
+    private HashSet<long> salvos = [], marcados = [];
+    private bool carregando = true, carregandoMenus, salvando;
+    private string? erro, sucesso;
+
+    private bool Alterado => !marcados.SetEquals(salvos);
+    private int Incluir => marcados.Count(id => !salvos.Contains(id));
+    private int Remover => salvos.Count(id => !marcados.Contains(id));
+
+    private RenderFragment RenderNo(MenuNo no, int nivel) => __builder =>
+    {
+        var id = no.Menu.Id!.Value;
+        var estado = EstadoDe(no);
+        <li role="treeitem" aria-checked="@(estado switch { Estado.Marcado => "true", Estado.Parcial => "mixed", _ => "false" })" @key="id">
+            <button type="button" class="gm-node @(estado != Estado.Vazio ? "marcado" : null)" style="--nivel:@nivel"
+                    @onclick="() => Alternar(no)" disabled="@salvando" title="@($"{id} - {no.Menu.Nome}")">
+                <i class="bi gm-check @(estado switch { Estado.Marcado => "bi-check-square-fill", Estado.Parcial => "bi-dash-square-fill", _ => "bi-square" })"></i>
+                <i class="bi @MenuConfig.IconeDe(no) gm-icon"></i>
+                <span class="gm-label">@no.Menu.Label</span>
+                <span class="gm-nome">@no.Menu.Nome</span>
+            </button>
+            @if (no.Filhos.Count > 0)
+            {
+                <ul class="gm-tree" role="group">
+                    @foreach (var filho in no.Filhos)
+                    {
+                        @RenderNo(filho, nivel + 1)
+                    }
+                </ul>
+            }
+        </li>
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        erro = null;
+        try
+        {
+            if (carregando) projetos = await ProjetosApi.ListarAsync();
+
+            ProjetoSelecionado = ProjetoQuery
+                ?? (GrupoQuery is { } g ? (await GruposApi.ObterAsync(g))?.Projeto : null)
+                ?? ProjetoAtual.Id;
+            if (projetoCarregado != ProjetoSelecionado)
+            {
+                grupos = await GruposApi.ListarAsync(ProjetoSelecionado);
+                projetoCarregado = ProjetoSelecionado;
+            }
+
+            // Só aceita grupo do projeto selecionado: a árvore é a dos menus do projeto do grupo
+            Grupo = grupos.Any(x => x.Id == GrupoQuery) ? GrupoQuery : null;
+            await CarregarMenusAsync();
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível carregar: {ex.Message}";
+            carregandoMenus = false;
+        }
+        finally
+        {
+            carregando = false;
+        }
+    }
+
+    private async Task CarregarMenusAsync()
+    {
+        salvos = [];
+        marcados = [];
+        arvore = [];
+        nos.Clear();
+        pais.Clear();
+        if (Grupo is not { } grupo) return;
+
+        carregandoMenus = true;
+        try
+        {
+            arvore = MenuArvore.Montar(await MenusApi.ListarAsync(ProjetoSelecionado));
+            Indexar(arvore, null);
+            salvos = (await GruposApi.MenusAsync(grupo)).ToHashSet();
+            marcados = [.. salvos];
+        }
+        finally
+        {
+            carregandoMenus = false;
+        }
+    }
+
+    /// <summary>Guarda o nó e o pai de cada item, como estão na árvore montada.</summary>
+    private void Indexar(IEnumerable<MenuNo> nivel, long? pai)
+    {
+        foreach (var no in nivel)
+        {
+            var id = no.Menu.Id!.Value;
+            nos[id] = no;
+            pais[id] = pai;
+            Indexar(no.Filhos, id);
+        }
+    }
+
+    private static IEnumerable<long> Descendentes(MenuNo no) =>
+        no.Filhos.SelectMany(f => Descendentes(f).Prepend(f.Menu.Id!.Value));
+
+    private IEnumerable<long> Ancestrais(long id)
+    {
+        while (pais.GetValueOrDefault(id) is { } pai)
+        {
+            yield return pai;
+            id = pai;
+        }
+    }
+
+    /// <summary>Pasta com só parte dos itens marcados aparece como "parcial".</summary>
+    private Estado EstadoDe(MenuNo no)
+    {
+        var desc = Descendentes(no).ToList();
+        var proprio = marcados.Contains(no.Menu.Id!.Value);
+        if (proprio && desc.All(marcados.Contains)) return Estado.Marcado;
+        return proprio || desc.Any(marcados.Contains) ? Estado.Parcial : Estado.Vazio;
+    }
+
+    /// <summary>Cascata: marcar inclui pastas acima e itens abaixo; desmarcar remove o item e os de baixo.</summary>
+    private void Alternar(MenuNo no)
+    {
+        sucesso = null;
+        var id = no.Menu.Id!.Value;
+        if (EstadoDe(no) == Estado.Marcado)
+        {
+            marcados.Remove(id);
+            marcados.ExceptWith(Descendentes(no));
+        }
+        else
+        {
+            marcados.Add(id);
+            marcados.UnionWith(Descendentes(no));
+            marcados.UnionWith(Ancestrais(id));
+        }
+    }
+
+    private void MarcarTodos(bool marcar)
+    {
+        sucesso = null;
+        marcados = marcar ? [.. nos.Keys] : [];
+    }
+
+    private void Descartar()
+    {
+        sucesso = null;
+        marcados = [.. salvos];
+    }
+
+    private async Task TrocarAsync(string? projeto, string? grupo)
+    {
+        if (Alterado && !await JS.InvokeAsync<bool>("confirm", "Há alterações não salvas. Descartar e continuar?"))
+        {
+            StateHasChanged(); // devolve os seletores ao valor atual
+            return;
+        }
+        sucesso = null;
+        var url = $"cadastros/grupos-menus?projeto={projeto}";
+        Nav.NavigateTo(string.IsNullOrEmpty(grupo) ? url : $"{url}&grupo={grupo}");
+    }
+
+    private async Task SalvarAsync()
+    {
+        if (Grupo is not { } grupo) return;
+        erro = sucesso = null;
+        salvando = true;
+        try
+        {
+            var (incluir, remover) = (Incluir, Remover);
+            var erros = await GruposApi.DefinirMenusAsync(grupo, marcados);
+            if (erros.Count == 0)
+            {
+                salvos = [.. marcados];
+                sucesso = $"Acessos do grupo {grupos.FirstOrDefault(g => g.Id == grupo)?.Nome} salvos: {incluir} incluído(s), {remover} removido(s).";
+            }
+            else erro = string.Join(" ", erros.Values.SelectMany(x => x));
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível salvar: {ex.Message}";
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+}

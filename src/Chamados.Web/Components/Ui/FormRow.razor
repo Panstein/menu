@@ -1,0 +1,25 @@
+@* Linha de formulário: rótulo à esquerda, controle(s) à direita. *@
+<div class="ui-form-row @(AlignTop ? "ui-form-row-top" : null)">
+    <label class="ui-label" for="@For">
+        @Label@if (Required)
+        {
+            <span class="ui-required">*</span>
+        }
+    </label>
+    <div>
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public bool Required { get; set; }
+
+    /// <summary>Id do controle associado ao rótulo.</summary>
+    [Parameter] public string? For { get; set; }
+
+    /// <summary>Alinha o rótulo ao topo (útil para textarea).</summary>
+    [Parameter] public bool AlignTop { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

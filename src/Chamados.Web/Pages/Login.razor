@@ -1,0 +1,100 @@
+@page "/login"
+@layout LoginLayout
+@attribute [AllowAnonymous]
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<PageTitle>Entrar · Chamados</PageTitle>
+
+<div class="login-card">
+    <div class="login-brand">
+        <i class="bi bi-headset"></i>
+        <div>
+            <div class="ui-header-caption">Sistema de</div>
+            <div class="login-brand-name">Chamados</div>
+        </div>
+    </div>
+
+    <EditForm Model="model" OnValidSubmit="EntrarAsync" class="login-body" FormName="login">
+        <DataAnnotationsValidator />
+
+        <div>
+            <h1 class="login-title">Acesso ao sistema</h1>
+            <p class="login-subtitle">Informe seu e-mail e senha para continuar.</p>
+        </div>
+
+        @if (erro is not null)
+        {
+            <UiAlert>@erro</UiAlert>
+        }
+
+        <div>
+            <label class="ui-label ui-label-stacked" for="email">E-mail <span class="ui-required">*</span></label>
+            <div class="ui-input-group">
+                <span class="ui-addon"><i class="bi bi-envelope"></i></span>
+                <InputText id="email" type="email" class="ui-input" @bind-Value="model.Email"
+                           autocomplete="username" placeholder="seu.email@empresa.com" autofocus />
+            </div>
+            <ValidationMessage For="() => model.Email" />
+        </div>
+
+        <div>
+            <label class="ui-label ui-label-stacked" for="senha">Senha <span class="ui-required">*</span></label>
+            <div class="ui-input-group">
+                <span class="ui-addon"><i class="bi bi-lock"></i></span>
+                <InputText id="senha" type="@(mostrarSenha ? "text" : "password")" class="ui-input"
+                           @bind-Value="model.Senha" autocomplete="current-password" maxlength="16" />
+                <button type="button" class="ui-addon ui-addon-btn" title="@(mostrarSenha ? "Ocultar senha" : "Mostrar senha")"
+                        @onclick="() => mostrarSenha = !mostrarSenha">
+                    <i class="bi @(mostrarSenha ? "bi-eye-slash" : "bi-eye")"></i>
+                </button>
+            </div>
+            <ValidationMessage For="() => model.Senha" />
+        </div>
+
+        <button type="submit" class="ui-btn ui-btn-primary login-submit" disabled="@entrando">
+            @if (entrando)
+            {
+                <span class="spinner-border spinner-border-sm"></span> <span>Entrando...</span>
+            }
+            else
+            {
+                <i class="bi bi-box-arrow-in-right"></i> <span>Entrar</span>
+            }
+        </button>
+    </EditForm>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    private readonly LoginRequest model = new();
+    private string? erro;
+    private bool entrando, mostrarSenha;
+
+    private async Task EntrarAsync()
+    {
+        erro = null;
+        entrando = true;
+        try
+        {
+            erro = await Auth.EntrarAsync(model);
+            if (erro is null)
+            {
+                Nav.NavigateTo(DestinoSeguro());
+                return;
+            }
+            model.Senha = "";
+        }
+        finally
+        {
+            entrando = false;
+        }
+    }
+
+    // Só aceita caminhos internos, para não redirecionar para outro site.
+    private string DestinoSeguro() =>
+        string.IsNullOrEmpty(ReturnUrl) || ReturnUrl.Contains("://") || ReturnUrl.StartsWith("//") || ReturnUrl.StartsWith("login")
+            ? ""
+            : ReturnUrl;
+}

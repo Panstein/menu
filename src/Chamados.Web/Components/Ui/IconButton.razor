@@ -1,0 +1,18 @@
+@* Botão-ícone pequeno usado nas ações das linhas do grid. *@
+<button type="button" class="ui-icon-btn @VariantClass" title="@Title" aria-label="@Title" @onclick="OnClick" @onclick:stopPropagation="true">
+    <i class="bi @Icon"></i>
+</button>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public UiVariant Variant { get; set; } = UiVariant.Primary;
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private string? VariantClass => Variant switch
+    {
+        UiVariant.Danger => "ui-icon-btn-danger",
+        UiVariant.Neutral => "ui-icon-btn-solid",
+        _ => null
+    };
+}

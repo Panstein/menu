@@ -1,0 +1,457 @@
+@page "/cadastros/menus/novo"
+@page "/cadastros/menus/editar"
+@inject MenusApi Api
+@inject MenuLateralService MenuLateral
+@inject ProjetosApi ProjetosApi
+@inject ProjetoAtual ProjetoAtual
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(Novo ? "Novo menu" : "Menu") · Chamados</PageTitle>
+
+@if (carregando)
+{
+    <UiAlert Variant="UiVariant.Info" Icon="bi-hourglass-split">Carregando...</UiAlert>
+}
+else if (naoEncontrado)
+{
+    <UiAlert>Menu não encontrado. <a href="cadastros/menus">Voltar à lista</a></UiAlert>
+}
+else
+{
+    <EditForm EditContext="editContext" OnValidSubmit="SalvarAsync" class="ui-page">
+        <DataAnnotationsValidator />
+
+        <FormHeader Caption="Menu" Number="@(Novo ? "NOVO" : model.Id.ToString())">
+            <ChildContent>
+                <HeaderField Label="Nome" Value="@model.Nome.ToUpperInvariant()" />
+                <HeaderField Label="Label" Value="@model.Label" />
+                <HeaderField Label="Depende de" Value="@(model.Depende is null || dependeDescricao is null ? null : $"{model.Depende} - {dependeDescricao}")" />
+                <HeaderField Label="Ordem" Value="@model.Ordem?.ToString()" />
+                <HeaderField Label="Projeto" Value="@(model.Projeto is null || projetoDescricao is null ? null : $"{model.Projeto} - {projetoDescricao}")" />
+            </ChildContent>
+            <Aside>
+                <KeyValueList Items="@([("Tabela", "CH_MENU"), ("Submenus", Filhos.Count.ToString())])">
+                    <dt>Status</dt>
+                    <dd><StatusPill Text="@(Novo ? "Inclusão" : "Alteração")" Dot="true" /></dd>
+                </KeyValueList>
+            </Aside>
+        </FormHeader>
+
+        @if (erroGeral is not null)
+        {
+            <UiAlert>@erroGeral</UiAlert>
+        }
+
+        <div class="ui-grid-2">
+            <SectionCard Title="Informações Gerais" Icon="bi-grid-fill">
+                <FormRow Label="Código" For="id">
+                    <input id="id" class="ui-input" style="max-width:140px" readonly tabindex="-1"
+                           value="@model.Id" placeholder="Gerado ao salvar" />
+                </FormRow>
+                <FormRow Label="Nome" Required="true" For="nome">
+                    <InputText id="nome" class="ui-input ui-upper" @bind-Value="model.Nome" maxlength="100" placeholder="Ex.: CAD_USUARIOS" />
+                    <ValidationMessage For="() => model.Nome" />
+                </FormRow>
+                <FormRow Label="Label" Required="true" For="label">
+                    <InputText id="label" class="ui-input" @bind-Value="model.Label" maxlength="100" placeholder="Texto exibido no menu" />
+                    <ValidationMessage For="() => model.Label" />
+                </FormRow>
+                <FormRow Label="Ordem" Required="true" For="ordem">
+                    <InputNumber id="ordem" class="ui-input" style="max-width:140px" @bind-Value="model.Ordem" min="0" max="99999" />
+                    <ValidationMessage For="() => model.Ordem" />
+                </FormRow>
+                <FormRow Label="Projeto" Required="true" For="projeto">
+                    <LookupField Id="projeto" Code="@projetoTexto" CodeChanged="AoMudarProjetoAsync"
+                                 Description="@projetoDescricao" OnSearch="AbrirBuscaProjeto" CodeWidth="90px" />
+                    <ValidationMessage For="() => model.Projeto" />
+                    @if (validandoProjeto)
+                    {
+                        <div class="ui-help text-start">Verificando código...</div>
+                    }
+                </FormRow>
+            </SectionCard>
+
+            <SectionCard Title="Hierarquia" Icon="bi-diagram-3-fill">
+                <FormRow Label="Depende de" For="depende">
+                    <LookupField Id="depende" Code="@dependeTexto" CodeChanged="AoMudarDependeAsync"
+                                 Description="@dependeDescricao" OnSearch="AbrirBusca" CodeWidth="90px" />
+                    <ValidationMessage For="() => model.Depende" />
+                    @if (validandoDepende)
+                    {
+                        <div class="ui-help text-start">Verificando código...</div>
+                    }
+                </FormRow>
+                <InfoCallout Icon="bi-signpost-split-fill" Title="Caminho no menu">
+                    @Caminho
+                </InfoCallout>
+                <div class="ui-help text-start">
+                    Deixe "Depende de" em branco para um item principal. Use a lupa (ou F2) para pesquisar.
+                </div>
+            </SectionCard>
+        </div>
+
+        @if (!Novo)
+        {
+            <SectionCard Title="Submenus" Icon="bi-list-nested">
+                <DataGrid TItem="MenuDto" Items="Filhos" Searchable="false" ShowFooter="false"
+                          EmptyText="Este menu não possui submenus." OnRowClick="AbrirMenu">
+                    <Columns>
+                        <GridColumn TItem="MenuDto" Title="Código" Field="m => m.Id" Align="end" Width="90px" />
+                        <GridColumn TItem="MenuDto" Title="Nome" Field="m => m.Nome" />
+                        <GridColumn TItem="MenuDto" Title="Label" Field="m => m.Label" />
+                        <GridColumn TItem="MenuDto" Title="Ordem" Field="m => m.Ordem" Align="end" Width="90px" />
+                    </Columns>
+                </DataGrid>
+            </SectionCard>
+        }
+
+        <div class="d-flex justify-content-between gap-2 flex-wrap">
+            <div>
+                @if (!Novo)
+                {
+                    <button type="button" class="ui-btn ui-btn-danger" @onclick="ExcluirAsync" disabled="@salvando">
+                        <i class="bi bi-trash"></i> Excluir
+                    </button>
+                }
+            </div>
+            <div class="d-flex gap-2">
+                <a class="ui-btn ui-btn-outline text-decoration-none" href="@($"cadastros/menus?projeto={model.Projeto}")">Cancelar</a>
+                <button type="submit" class="ui-btn ui-btn-primary" disabled="@(salvando || validandoDepende || validandoProjeto)">
+                    <i class="bi bi-check-lg"></i> @(salvando ? "Salvando..." : "Salvar")
+                </button>
+            </div>
+        </div>
+    </EditForm>
+
+    <UiModal @bind-Open="buscaAberta" Title="Pesquisar menu" Icon="bi-search" Width="720px">
+        <DataGrid TItem="MenuDto" Items="Candidatos" OnRowClick="EscolherAsync" ShowFooter="false"
+                  EmptyText="Nenhum menu disponível.">
+            <Columns>
+                <GridColumn TItem="MenuDto" Title="Código" Field="m => m.Id" Align="end" Width="90px" />
+                <GridColumn TItem="MenuDto" Title="Nome" Field="m => m.Nome" />
+                <GridColumn TItem="MenuDto" Title="Label" Field="m => m.Label" />
+                <GridColumn TItem="MenuDto" Title="Caminho" Field="m => CaminhoDe(m.Id)" />
+            </Columns>
+        </DataGrid>
+    </UiModal>
+
+    <UiModal @bind-Open="buscaProjetoAberta" Title="Pesquisar projeto" Icon="bi-search" Width="560px">
+        <DataGrid TItem="ProjetoDto" Items="projetos" OnRowClick="EscolherProjetoAsync" ShowFooter="false"
+                  EmptyText="Nenhum projeto cadastrado.">
+            <Columns>
+                <GridColumn TItem="ProjetoDto" Title="Código" Field="p => p.Id" Align="end" Width="90px" />
+                <GridColumn TItem="ProjetoDto" Title="Nome" Field="p => p.Nome" />
+            </Columns>
+        </DataGrid>
+    </UiModal>
+}
+
+@code {
+    [SupplyParameterFromQuery] public long? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "projeto")] public long? ProjetoQuery { get; set; }
+
+    private bool Novo => Id is null;
+
+    private MenuDto model = new();
+    private List<MenuDto> todos = [];
+    private List<ProjetoDto> projetos = [];
+    private EditContext editContext = null!;
+    private ValidationMessageStore mensagens = null!;
+    private bool carregando = true, naoEncontrado, salvando, validandoDepende, buscaAberta, validandoProjeto, buscaProjetoAberta;
+    private string? erroGeral, dependeTexto, dependeDescricao, projetoTexto, projetoDescricao;
+
+    private List<MenuDto> Filhos => Novo ? [] : todos.Where(m => m.Depende == model.Id).OrderBy(m => m.Ordem).ToList();
+
+    /// <summary>Menus que podem ser pai: os do mesmo projeto, exceto o próprio e os que estão abaixo dele.</summary>
+    private IEnumerable<MenuDto> Candidatos
+    {
+        get
+        {
+            var bloqueados = Novo ? [] : Descendentes(model.Id!.Value).Append(model.Id.Value).ToHashSet();
+            return todos.Where(m => m.Projeto == model.Projeto && !bloqueados.Contains(m.Id!.Value));
+        }
+    }
+
+    private string Caminho
+    {
+        get
+        {
+            var atual = string.IsNullOrWhiteSpace(model.Label) ? "(NOVO ITEM)" : model.Label.Trim();
+            var pai = model.Depende is null || dependeDescricao is null ? null : CaminhoDe(model.Depende);
+            return pai is null ? atual : $"{pai} > {atual}";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        carregando = true;
+        naoEncontrado = false;
+        erroGeral = null;
+        model = new MenuDto();
+
+        try
+        {
+            todos = await Api.ListarAsync();
+            projetos = await ProjetosApi.ListarAsync();
+            if (Novo)
+            {
+                // Inclusão: projeto do filtro da lista (?projeto=N) ou, sem ele, o projeto deste sistema
+                model.Projeto = ProjetoQuery ?? ProjetoAtual.Id;
+                model.ProjetoNome = projetos.FirstOrDefault(p => p.Id == model.Projeto)?.Nome;
+            }
+            else
+            {
+                var m = todos.FirstOrDefault(x => x.Id == Id) ?? await Api.ObterAsync(Id!.Value);
+                if (m is null) naoEncontrado = true;
+                else model = Copia(m);
+            }
+        }
+        catch (Exception ex)
+        {
+            erroGeral = $"Não foi possível carregar: {ex.Message}";
+        }
+
+        dependeTexto = model.Depende?.ToString();
+        dependeDescricao = model.DependeLabel;
+        projetoTexto = model.Projeto?.ToString();
+        projetoDescricao = model.ProjetoNome;
+
+        editContext = new EditContext(model);
+        mensagens = new ValidationMessageStore(editContext);
+        editContext.OnValidationRequested += (_, _) => mensagens.Clear();
+        editContext.OnFieldChanged += (_, e) => mensagens.Clear(e.FieldIdentifier);
+        carregando = false;
+    }
+
+    /// <summary>Validação do MN_DEPENDE: o código precisa existir na CH_MENU (consulta a API).</summary>
+    private async Task AoMudarDependeAsync(string? texto)
+    {
+        dependeTexto = texto?.Trim();
+        dependeDescricao = null;
+        var campo = editContext.Field(nameof(MenuDto.Depende));
+        mensagens.Clear(campo);
+
+        if (string.IsNullOrEmpty(dependeTexto))
+        {
+            model.Depende = null;
+        }
+        else if (!long.TryParse(dependeTexto, out var codigo) || codigo <= 0)
+        {
+            model.Depende = null;
+            mensagens.Add(campo, "Informe um código numérico.");
+        }
+        else if (codigo == model.Id)
+        {
+            model.Depende = codigo;
+            mensagens.Add(campo, "Um menu não pode depender dele mesmo.");
+        }
+        else if (!Novo && Descendentes(model.Id!.Value).Contains(codigo))
+        {
+            model.Depende = codigo;
+            mensagens.Add(campo, $"O menu {codigo} já está abaixo deste item: a dependência criaria um ciclo.");
+        }
+        else
+        {
+            model.Depende = codigo;
+            validandoDepende = true;
+            try
+            {
+                var pai = await Api.ObterAsync(codigo);
+                if (pai is null)
+                {
+                    mensagens.Add(campo, $"Não existe menu com o código {codigo}.");
+                }
+                else if (pai.Projeto != model.Projeto)
+                {
+                    mensagens.Add(campo, $"O menu {codigo} pertence a outro projeto.");
+                }
+                else
+                {
+                    dependeDescricao = pai.Label;
+                    if (todos.All(m => m.Id != pai.Id)) todos.Add(pai);
+                    SugerirOrdem();
+                }
+            }
+            catch (Exception ex)
+            {
+                mensagens.Add(campo, $"Não foi possível validar o código: {ex.Message}");
+            }
+            finally
+            {
+                validandoDepende = false;
+            }
+        }
+
+        editContext.NotifyValidationStateChanged();
+    }
+
+    private void AbrirBusca() => buscaAberta = true;
+
+    private async Task EscolherAsync(MenuDto m)
+    {
+        buscaAberta = false;
+        await AoMudarDependeAsync(m.Id.ToString());
+    }
+
+    /// <summary>Validação do MN_PROJETO: o código precisa existir na CH_PROJETOS (FK ch_menu_ch_projetos_fk).</summary>
+    private async Task AoMudarProjetoAsync(string? texto)
+    {
+        projetoTexto = texto?.Trim();
+        projetoDescricao = null;
+        var campo = editContext.Field(nameof(MenuDto.Projeto));
+        mensagens.Clear(campo);
+
+        if (string.IsNullOrEmpty(projetoTexto))
+        {
+            model.Projeto = null;
+        }
+        else if (!long.TryParse(projetoTexto, out var codigo) || codigo <= 0)
+        {
+            model.Projeto = null;
+            mensagens.Add(campo, "Informe um código numérico.");
+        }
+        else
+        {
+            model.Projeto = codigo;
+            validandoProjeto = true;
+            try
+            {
+                var projeto = await ProjetosApi.ObterAsync(codigo);
+                if (projeto is null) mensagens.Add(campo, $"Não existe projeto com o código {codigo}.");
+                else projetoDescricao = projeto.Nome;
+            }
+            catch (Exception ex)
+            {
+                mensagens.Add(campo, $"Não foi possível validar o código: {ex.Message}");
+            }
+            finally
+            {
+                validandoProjeto = false;
+            }
+        }
+
+        // O menu pai precisa ser do mesmo projeto: revalida o "Depende de" com o projeto novo
+        if (!string.IsNullOrEmpty(dependeTexto))
+            await AoMudarDependeAsync(dependeTexto);
+
+        editContext.NotifyValidationStateChanged();
+    }
+
+    private void AbrirBuscaProjeto() => buscaProjetoAberta = true;
+
+    private async Task EscolherProjetoAsync(ProjetoDto p)
+    {
+        buscaProjetoAberta = false;
+        await AoMudarProjetoAsync(p.Id.ToString());
+    }
+
+    /// <summary>Na inclusão, sugere a próxima ordem entre os itens do mesmo nível.</summary>
+    private void SugerirOrdem()
+    {
+        if (!Novo || model.Ordem is not null) return;
+        var irmaos = todos.Where(m => m.Depende == model.Depende && m.Projeto == model.Projeto).Select(m => m.Ordem ?? 0);
+        model.Ordem = irmaos.Any() ? irmaos.Max() + 1 : 1;
+    }
+
+    private async Task SalvarAsync()
+    {
+        erroGeral = null;
+
+        // Revalida MN_PROJETO e MN_DEPENDE (a validação do formulário limpa as mensagens anteriores)
+        await AoMudarProjetoAsync(projetoTexto);
+        if (string.IsNullOrEmpty(dependeTexto))
+            await AoMudarDependeAsync(dependeTexto);
+        if (editContext.GetValidationMessages(editContext.Field(nameof(MenuDto.Depende))).Any() ||
+            editContext.GetValidationMessages(editContext.Field(nameof(MenuDto.Projeto))).Any())
+            return;
+
+        salvando = true;
+        try
+        {
+            var envio = Copia(model);
+            envio.Normalizar();
+
+            var (_, erros) = await Api.SalvarAsync(envio);
+            if (erros.Count == 0)
+            {
+                MenuLateral.Recarregar();
+                Nav.NavigateTo($"cadastros/menus?projeto={model.Projeto}");
+                return;
+            }
+            MostrarErros(erros);
+        }
+        catch (Exception ex)
+        {
+            erroGeral = $"Não foi possível salvar: {ex.Message}";
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+
+    private async Task ExcluirAsync()
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Excluir o menu {model.Id} - {model.Label}?")) return;
+        try
+        {
+            var erros = await Api.ExcluirAsync(model.Id!.Value);
+            if (erros.Count == 0)
+            {
+                MenuLateral.Recarregar();
+                Nav.NavigateTo($"cadastros/menus?projeto={model.Projeto}");
+            }
+            else MostrarErros(erros);
+        }
+        catch (Exception ex)
+        {
+            erroGeral = $"Não foi possível excluir: {ex.Message}";
+        }
+    }
+
+    private void AbrirMenu(MenuDto m) => Nav.NavigateTo($"cadastros/menus/editar?id={m.Id}");
+
+    private void MostrarErros(IDictionary<string, string[]> erros)
+    {
+        foreach (var (campo, msgs) in erros)
+        {
+            var prop = typeof(MenuDto).GetProperties()
+                .FirstOrDefault(p => p.Name.Equals(campo.TrimStart('$', '.'), StringComparison.OrdinalIgnoreCase));
+            if (prop is null) erroGeral = string.Join(" ", msgs);
+            else foreach (var m in msgs) mensagens.Add(editContext.Field(prop.Name), m);
+        }
+        editContext.NotifyValidationStateChanged();
+    }
+
+    private HashSet<long> Descendentes(long id)
+    {
+        var resultado = new HashSet<long>();
+        var fila = new Queue<long>([id]);
+        while (fila.Count > 0)
+        {
+            var atual = fila.Dequeue();
+            foreach (var filho in todos.Where(m => m.Depende == atual && m.Id is not null))
+                if (resultado.Add(filho.Id!.Value)) fila.Enqueue(filho.Id.Value);
+        }
+        return resultado;
+    }
+
+    private string? CaminhoDe(long? id)
+    {
+        var partes = new List<string>();
+        var vistos = new HashSet<long>();
+        while (id is { } atual && vistos.Add(atual) && todos.FirstOrDefault(m => m.Id == atual) is { } m)
+        {
+            partes.Insert(0, m.Label);
+            id = m.Depende;
+        }
+        return partes.Count == 0 ? null : string.Join(" > ", partes);
+    }
+
+    private static MenuDto Copia(MenuDto m) => new()
+    {
+        Id = m.Id, Nome = m.Nome, Label = m.Label, Depende = m.Depende, Ordem = m.Ordem, DependeLabel = m.DependeLabel,
+        Projeto = m.Projeto, ProjetoNome = m.ProjetoNome
+    };
+}

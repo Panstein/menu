@@ -1,0 +1,96 @@
+@page "/cadastros/usuarios"
+@inject UsuariosApi Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Usuários · Chamados</PageTitle>
+
+<div class="ui-page">
+    <div class="ui-page-title">
+        <h1>Usuários</h1>
+    </div>
+
+    @if (erro is not null)
+    {
+        <UiAlert>@erro</UiAlert>
+    }
+
+    <SectionCard Title="Cadastro de Usuários" Icon="bi-people-fill">
+        <Legend Items="@([("Superusuário", UiVariant.Success), ("Usuário comum", UiVariant.Neutral)])" />
+
+        <DataGrid TItem="UsuarioDto" Items="usuarios" Loading="carregando" OnRowClick="Editar">
+            <Toolbar>
+                <button class="ui-btn ui-btn-primary" @onclick="@(() => Nav.NavigateTo("cadastros/usuarios/novo"))">
+                    <i class="bi bi-plus-lg"></i> Inserir usuário
+                </button>
+            </Toolbar>
+            <RowActions Context="u">
+                <IconButton Icon="bi-pencil-square" Title="Editar" OnClick="() => Editar(u)" />
+                <IconButton Icon="bi-x-lg" Title="Excluir" Variant="UiVariant.Danger" OnClick="() => ExcluirAsync(u)" />
+                <span class="ui-dot ms-1 align-self-center @(u.SuperUsuario ? "ui-dot-success" : null)"></span>
+            </RowActions>
+            <Columns>
+                <GridColumn TItem="UsuarioDto" Title="Código" Field="u => u.Id" Align="end" Width="90px" />
+                <GridColumn TItem="UsuarioDto" Title="Nome" Field="u => u.Nome" />
+                <GridColumn TItem="UsuarioDto" Title="E-mail" Field="u => u.Email" />
+                <GridColumn TItem="UsuarioDto" Title="CPF" Field="u => u.Cpf" />
+                <GridColumn TItem="UsuarioDto" Title="Superusuário" Field="Perfil" Align="center" Width="130px">
+                    <Template Context="u">
+                        @if (u.SuperUsuario)
+                        {
+                            <StatusPill Text="Sim" Variant="UiVariant.Success" />
+                        }
+                        else
+                        {
+                            <StatusPill Text="Não" />
+                        }
+                    </Template>
+                </GridColumn>
+            </Columns>
+        </DataGrid>
+    </SectionCard>
+</div>
+
+@code {
+    private List<UsuarioDto> usuarios = [];
+    private bool carregando = true;
+    private string? erro;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            usuarios = await Api.ListarAsync();
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível carregar os usuários: {ex.Message}";
+        }
+        finally
+        {
+            carregando = false;
+        }
+    }
+
+    private static object Perfil(UsuarioDto u) => u.SuperUsuario ? "Sim" : "Não";
+
+    private void Editar(UsuarioDto u) =>
+        Nav.NavigateTo($"cadastros/usuarios/editar?email={Uri.EscapeDataString(u.Email)}");
+
+    private async Task ExcluirAsync(UsuarioDto u)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Excluir o usuário {u.Nome}?")) return;
+
+        erro = null;
+        try
+        {
+            var erros = await Api.ExcluirAsync(u.Email);
+            if (erros.Count == 0) usuarios.Remove(u);
+            else erro = string.Join(" ", erros.Values.SelectMany(m => m));
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível excluir: {ex.Message}";
+        }
+    }
+}

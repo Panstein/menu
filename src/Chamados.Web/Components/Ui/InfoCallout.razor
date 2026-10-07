@@ -1,0 +1,16 @@
+<div class="ui-callout">
+    <i class="bi @Icon"></i>
+    <div>
+        @if (!string.IsNullOrEmpty(Title))
+        {
+            <div class="ui-callout-title">@Title</div>
+        }
+        <div class="ui-callout-text">@ChildContent</div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "bi-geo-alt-fill";
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

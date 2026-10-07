@@ -1,0 +1,218 @@
+@page "/cadastros/grupos/novo"
+@page "/cadastros/grupos/editar"
+@inject GruposApi Api
+@inject UsuariosApi UsuariosApi
+@inject ProjetosApi ProjetosApi
+@inject ProjetoAtual ProjetoAtual
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(Novo ? "Novo grupo" : "Grupo") · Chamados</PageTitle>
+
+@if (carregando)
+{
+    <UiAlert Variant="UiVariant.Info" Icon="bi-hourglass-split">Carregando...</UiAlert>
+}
+else if (naoEncontrado)
+{
+    <UiAlert>Grupo não encontrado. <a href="cadastros/grupos">Voltar à lista</a></UiAlert>
+}
+else
+{
+    <EditForm EditContext="editContext" OnValidSubmit="SalvarAsync" class="ui-page">
+        <DataAnnotationsValidator />
+
+        <FormHeader Caption="Grupo" Number="@(Novo ? "NOVO" : model.Id.ToString())">
+            <ChildContent>
+                <HeaderField Label="Nome" Value="@model.Nome.ToUpperInvariant()" />
+                <HeaderField Label="Projeto" Value="@ProjetoTexto" />
+            </ChildContent>
+            <Aside>
+                <KeyValueList Items="@([("Tabela", "CH_GRUPOS"), ("Usuários", membros.Count.ToString())])">
+                    <dt>Status</dt>
+                    <dd><StatusPill Text="@(Novo ? "Inclusão" : "Alteração")" Dot="true" /></dd>
+                </KeyValueList>
+            </Aside>
+        </FormHeader>
+
+        @if (erroGeral is not null)
+        {
+            <UiAlert>@erroGeral</UiAlert>
+        }
+
+        <SectionCard Title="Informações Gerais" Icon="bi-grid-fill">
+            <FormRow Label="Código" For="id">
+                <input id="id" class="ui-input" style="max-width:140px" readonly tabindex="-1"
+                       value="@model.Id" placeholder="Gerado ao salvar" />
+            </FormRow>
+            <FormRow Label="Nome" Required="true" For="nome">
+                <InputText id="nome" class="ui-input ui-upper" @bind-Value="model.Nome" placeholder="Nome do grupo" />
+                <ValidationMessage For="() => model.Nome" />
+            </FormRow>
+            <FormRow Label="Projeto" Required="true" For="projeto">
+                <InputSelect id="projeto" class="ui-select" @bind-Value="model.Projeto">
+                    <option value="">Selecione o projeto...</option>
+                    @foreach (var p in projetos)
+                    {
+                        <option value="@p.Id">@p.Id - @p.Nome@(p.Id == ProjetoAtual.Id ? " (este sistema)" : null)</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="() => model.Projeto" />
+                <div class="ui-help text-start">O grupo só pode receber acesso aos menus deste projeto.</div>
+            </FormRow>
+        </SectionCard>
+
+        @if (!Novo)
+        {
+            <SectionCard Title="Usuários do grupo" Icon="bi-people">
+                <DataGrid TItem="UsuarioDto" Items="membros" Searchable="false" ShowFooter="false"
+                          EmptyText="Nenhum usuário neste grupo.">
+                    <Toolbar>
+                        <a class="ui-btn ui-btn-outline text-decoration-none" href="@($"cadastros/usuarios-grupos?projeto={salvoProjeto}&grupo={model.Id}")">
+                            <i class="bi bi-person-vcard"></i> Alterar usuários
+                        </a>
+                        <a class="ui-btn ui-btn-outline text-decoration-none" href="@($"cadastros/grupos-menus?projeto={salvoProjeto}&grupo={model.Id}")">
+                            <i class="bi bi-diagram-3"></i> Menus do grupo
+                        </a>
+                    </Toolbar>
+                    <Columns>
+                        <GridColumn TItem="UsuarioDto" Title="Código" Field="u => u.Id" Align="end" Width="90px" />
+                        <GridColumn TItem="UsuarioDto" Title="Nome" Field="u => u.Nome" />
+                        <GridColumn TItem="UsuarioDto" Title="E-mail" Field="u => u.Email" />
+                    </Columns>
+                </DataGrid>
+            </SectionCard>
+        }
+
+        <div class="d-flex justify-content-between gap-2 flex-wrap">
+            <div>
+                @if (!Novo)
+                {
+                    <button type="button" class="ui-btn ui-btn-danger" @onclick="ExcluirAsync" disabled="@salvando">
+                        <i class="bi bi-trash"></i> Excluir
+                    </button>
+                }
+            </div>
+            <div class="d-flex gap-2">
+                <a class="ui-btn ui-btn-outline text-decoration-none" href="@ListaUrl">Cancelar</a>
+                <button type="submit" class="ui-btn ui-btn-primary" disabled="@salvando">
+                    <i class="bi bi-check-lg"></i> @(salvando ? "Salvando..." : "Salvar")
+                </button>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [SupplyParameterFromQuery] public long? Id { get; set; }
+
+    /// <summary>Na inclusão, ?projeto=N vem do filtro da lista; sem ele, o projeto deste sistema.</summary>
+    [SupplyParameterFromQuery(Name = "projeto")] public long? ProjetoQuery { get; set; }
+
+    private bool Novo => Id is null;
+
+    private GrupoDto model = new();
+    private long? salvoProjeto;
+    private List<UsuarioDto> membros = [];
+    private List<ProjetoDto> projetos = [];
+    private EditContext editContext = null!;
+    private ValidationMessageStore mensagens = null!;
+    private bool carregando = true, naoEncontrado, salvando;
+    private string? erroGeral;
+
+    private string? ProjetoTexto =>
+        projetos.FirstOrDefault(p => p.Id == model.Projeto) is { } p ? $"{p.Id} - {p.Nome}" : null;
+
+    private string ListaUrl => $"cadastros/grupos?projeto={model.Projeto ?? ProjetoAtual.Id}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        carregando = true;
+        naoEncontrado = false;
+        erroGeral = null;
+        model = new GrupoDto { Projeto = ProjetoQuery ?? ProjetoAtual.Id };
+        membros = [];
+
+        try
+        {
+            projetos = await ProjetosApi.ListarAsync();
+            if (!Novo)
+            {
+                var g = await Api.ObterAsync(Id!.Value);
+                if (g is null) naoEncontrado = true;
+                else
+                {
+                    model = new GrupoDto { Id = g.Id, Nome = g.Nome, Projeto = g.Projeto };
+                    var ids = (await Api.UsuariosAsync(g.Id!.Value)).ToHashSet();
+                    membros = (await UsuariosApi.ListarAsync()).Where(u => u.Id is { } uid && ids.Contains(uid)).ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            erroGeral = $"Não foi possível carregar: {ex.Message}";
+        }
+
+        salvoProjeto = model.Projeto;
+        editContext = new EditContext(model);
+        mensagens = new ValidationMessageStore(editContext);
+        editContext.OnValidationRequested += (_, _) => mensagens.Clear();
+        editContext.OnFieldChanged += (_, e) => mensagens.Clear(e.FieldIdentifier);
+        carregando = false;
+    }
+
+    private async Task SalvarAsync()
+    {
+        erroGeral = null;
+        salvando = true;
+        try
+        {
+            var envio = new GrupoDto { Id = model.Id, Nome = model.Nome, Projeto = model.Projeto };
+            envio.Normalizar();
+
+            var (_, erros) = await Api.SalvarAsync(envio);
+            if (erros.Count == 0)
+            {
+                Nav.NavigateTo(ListaUrl);
+                return;
+            }
+            MostrarErros(erros);
+        }
+        catch (Exception ex)
+        {
+            erroGeral = $"Não foi possível salvar: {ex.Message}";
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+
+    private async Task ExcluirAsync()
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Excluir o grupo {model.Id} - {model.Nome}?")) return;
+        try
+        {
+            var erros = await Api.ExcluirAsync(model.Id!.Value);
+            if (erros.Count == 0) Nav.NavigateTo(ListaUrl);
+            else MostrarErros(erros);
+        }
+        catch (Exception ex)
+        {
+            erroGeral = $"Não foi possível excluir: {ex.Message}";
+        }
+    }
+
+    private void MostrarErros(IDictionary<string, string[]> erros)
+    {
+        foreach (var (campo, msgs) in erros)
+        {
+            var nome = campo.TrimStart('$', '.');
+            var prop = new[] { nameof(GrupoDto.Nome), nameof(GrupoDto.Projeto) }
+                .FirstOrDefault(p => p.Equals(nome, StringComparison.OrdinalIgnoreCase));
+            if (prop is null) erroGeral = string.Join(" ", msgs);
+            else foreach (var m in msgs) mensagens.Add(editContext.Field(prop), m);
+        }
+        editContext.NotifyValidationStateChanged();
+    }
+}

@@ -1,0 +1,224 @@
+@page "/cadastros/usuarios-grupos"
+@inject GruposApi GruposApi
+@inject UsuariosApi UsuariosApi
+@inject ProjetosApi ProjetosApi
+@inject ProjetoAtual ProjetoAtual
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Usuários x Grupos · Chamados</PageTitle>
+
+<div class="ui-page">
+    <div class="ui-page-title">
+        <h1>Usuários x Grupos</h1>
+    </div>
+
+    @if (erro is not null)
+    {
+        <UiAlert>@erro</UiAlert>
+    }
+    @if (sucesso is not null)
+    {
+        <UiAlert Variant="UiVariant.Success" Icon="bi-check-circle">@sucesso</UiAlert>
+    }
+
+    <SectionCard Title="Grupo" Icon="bi-collection">
+        <FormRow Label="Projeto" Required="true" For="projeto">
+            <select id="projeto" class="ui-select" value="@ProjetoSelecionado"
+                    @onchange="e => TrocarAsync(e.Value?.ToString(), null)" disabled="@salvando">
+                @foreach (var p in projetos)
+                {
+                    <option value="@p.Id">@p.Id - @p.Nome@(p.Id == ProjetoAtual.Id ? " (este sistema)" : null)</option>
+                }
+            </select>
+        </FormRow>
+        <FormRow Label="Grupo" Required="true" For="grupo">
+            <select id="grupo" class="ui-select" value="@(Grupo?.ToString() ?? "")"
+                    @onchange="e => TrocarAsync(ProjetoSelecionado.ToString(), e.Value?.ToString())" disabled="@salvando">
+                <option value="">Selecione o grupo...</option>
+                @foreach (var g in grupos)
+                {
+                    <option value="@g.Id">@g.Id - @g.Nome</option>
+                }
+            </select>
+        </FormRow>
+        @if (!carregando && grupos.Count == 0)
+        {
+            <div class="ui-help text-start">
+                Nenhum grupo cadastrado neste projeto. <a href="@($"cadastros/grupos/novo?projeto={ProjetoSelecionado}")">Cadastrar grupo</a>
+            </div>
+        }
+    </SectionCard>
+
+    @if (Grupo is not null)
+    {
+        <SectionCard Title="Usuários do grupo" Icon="bi-person-vcard">
+            <DataGrid TItem="UsuarioDto" Items="usuarios" Loading="carregandoUsuarios" OnRowClick="Alternar"
+                      EmptyText="Nenhum usuário cadastrado.">
+                <Toolbar>
+                    <button class="ui-btn ui-btn-outline" @onclick="() => MarcarTodos(true)" disabled="@salvando">
+                        <i class="bi bi-check2-all"></i> Marcar todos
+                    </button>
+                    <button class="ui-btn ui-btn-outline" @onclick="() => MarcarTodos(false)" disabled="@salvando">
+                        <i class="bi bi-x-square"></i> Desmarcar todos
+                    </button>
+                </Toolbar>
+                <Columns>
+                    <GridColumn TItem="UsuarioDto" Title="No grupo" Field="u => Marcado(u)" Align="center" Width="100px">
+                        <Template Context="u">
+                            <input type="checkbox" class="form-check-input" checked="@Marcado(u)"
+                                   @onclick="() => Alternar(u)" @onclick:stopPropagation="true" disabled="@salvando" />
+                        </Template>
+                    </GridColumn>
+                    <GridColumn TItem="UsuarioDto" Title="Código" Field="u => u.Id" Align="end" Width="90px" />
+                    <GridColumn TItem="UsuarioDto" Title="Nome" Field="u => u.Nome" />
+                    <GridColumn TItem="UsuarioDto" Title="E-mail" Field="u => u.Email" />
+                </Columns>
+            </DataGrid>
+        </SectionCard>
+
+        <div class="d-flex justify-content-between gap-2 flex-wrap align-items-center">
+            <div class="ui-help text-start">
+                @marcados.Count usuário(s) marcado(s)@(Alterado ? " · alterações não salvas" : null)
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="ui-btn ui-btn-outline" @onclick="Descartar" disabled="@(salvando || !Alterado)">
+                    Descartar
+                </button>
+                <button type="button" class="ui-btn ui-btn-primary" @onclick="SalvarAsync" disabled="@(salvando || !Alterado)">
+                    <i class="bi bi-check-lg"></i> @(salvando ? "Salvando..." : "Salvar")
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>?projeto=N: grupos daquele projeto; sem ele, o projeto do grupo informado ou o deste sistema.</summary>
+    [SupplyParameterFromQuery(Name = "projeto")] public long? ProjetoQuery { get; set; }
+
+    /// <summary>?grupo=N já abre com o grupo selecionado (link vindo do cadastro de grupos).</summary>
+    [SupplyParameterFromQuery(Name = "grupo")] public long? GrupoQuery { get; set; }
+
+    private long ProjetoSelecionado;
+    private long? Grupo;
+    private long? projetoCarregado;
+    private List<ProjetoDto> projetos = [];
+    private List<GrupoDto> grupos = [];
+    private List<UsuarioDto> usuarios = [];
+    private HashSet<long> salvos = [], marcados = [];
+    private bool carregando = true, carregandoUsuarios, salvando;
+    private string? erro, sucesso;
+
+    private bool Alterado => !marcados.SetEquals(salvos);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        erro = null;
+        try
+        {
+            if (carregando)
+            {
+                projetos = await ProjetosApi.ListarAsync();
+                usuarios = await UsuariosApi.ListarAsync();
+            }
+
+            ProjetoSelecionado = ProjetoQuery
+                ?? (GrupoQuery is { } g ? (await GruposApi.ObterAsync(g))?.Projeto : null)
+                ?? ProjetoAtual.Id;
+            if (projetoCarregado != ProjetoSelecionado)
+            {
+                grupos = await GruposApi.ListarAsync(ProjetoSelecionado);
+                projetoCarregado = ProjetoSelecionado;
+            }
+
+            // Só aceita grupo do projeto selecionado
+            Grupo = grupos.Any(x => x.Id == GrupoQuery) ? GrupoQuery : null;
+            await CarregarMembrosAsync();
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível carregar: {ex.Message}";
+        }
+        finally
+        {
+            carregando = false;
+        }
+    }
+
+    private async Task CarregarMembrosAsync()
+    {
+        salvos = [];
+        marcados = [];
+        if (Grupo is not { } id) return;
+
+        carregandoUsuarios = true;
+        try
+        {
+            salvos = (await GruposApi.UsuariosAsync(id)).ToHashSet();
+            marcados = [.. salvos];
+        }
+        finally
+        {
+            carregandoUsuarios = false;
+        }
+    }
+
+    private async Task TrocarAsync(string? projeto, string? grupo)
+    {
+        if (Alterado && !await JS.InvokeAsync<bool>("confirm", "Há alterações não salvas. Descartar e continuar?"))
+        {
+            StateHasChanged(); // devolve os seletores ao valor atual
+            return;
+        }
+        sucesso = null;
+        var url = $"cadastros/usuarios-grupos?projeto={projeto}";
+        Nav.NavigateTo(string.IsNullOrEmpty(grupo) ? url : $"{url}&grupo={grupo}");
+    }
+
+    private bool Marcado(UsuarioDto u) => u.Id is { } id && marcados.Contains(id);
+
+    private void Alternar(UsuarioDto u)
+    {
+        if (salvando || u.Id is not { } id) return;
+        sucesso = null;
+        if (!marcados.Remove(id)) marcados.Add(id);
+    }
+
+    private void MarcarTodos(bool marcar)
+    {
+        sucesso = null;
+        marcados = marcar ? usuarios.Where(u => u.Id is not null).Select(u => u.Id!.Value).ToHashSet() : [];
+    }
+
+    private void Descartar()
+    {
+        sucesso = null;
+        marcados = [.. salvos];
+    }
+
+    private async Task SalvarAsync()
+    {
+        if (Grupo is not { } id) return;
+        erro = sucesso = null;
+        salvando = true;
+        try
+        {
+            var erros = await GruposApi.DefinirUsuariosAsync(id, marcados);
+            if (erros.Count == 0)
+            {
+                salvos = [.. marcados];
+                sucesso = $"Usuários do grupo {grupos.FirstOrDefault(g => g.Id == id)?.Nome} salvos.";
+            }
+            else erro = string.Join(" ", erros.Values.SelectMany(x => x));
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível salvar: {ex.Message}";
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+}

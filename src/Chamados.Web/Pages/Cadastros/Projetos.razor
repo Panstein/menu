@@ -1,0 +1,77 @@
+@page "/cadastros/projetos"
+@inject ProjetosApi Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Projetos · Chamados</PageTitle>
+
+<div class="ui-page">
+    <div class="ui-page-title">
+        <h1>Projetos</h1>
+    </div>
+
+    @if (erro is not null)
+    {
+        <UiAlert>@erro</UiAlert>
+    }
+
+    <SectionCard Title="Cadastro de Projetos" Icon="bi-kanban">
+        <DataGrid TItem="ProjetoDto" Items="projetos" Loading="carregando" OnRowClick="Editar"
+                  EmptyText="Nenhum projeto cadastrado.">
+            <Toolbar>
+                <button class="ui-btn ui-btn-primary" @onclick="@(() => Nav.NavigateTo("cadastros/projetos/novo"))">
+                    <i class="bi bi-plus-lg"></i> Inserir projeto
+                </button>
+            </Toolbar>
+            <RowActions Context="p">
+                <IconButton Icon="bi-pencil-square" Title="Editar" OnClick="() => Editar(p)" />
+                <IconButton Icon="bi-x-lg" Title="Excluir" Variant="UiVariant.Danger" OnClick="() => ExcluirAsync(p)" />
+            </RowActions>
+            <Columns>
+                <GridColumn TItem="ProjetoDto" Title="Código" Field="p => p.Id" Align="end" Width="90px" />
+                <GridColumn TItem="ProjetoDto" Title="Nome" Field="p => p.Nome" />
+            </Columns>
+        </DataGrid>
+    </SectionCard>
+</div>
+
+@code {
+    private List<ProjetoDto> projetos = [];
+    private bool carregando = true;
+    private string? erro;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            projetos = await Api.ListarAsync();
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível carregar os projetos: {ex.Message}";
+        }
+        finally
+        {
+            carregando = false;
+        }
+    }
+
+    private void Editar(ProjetoDto p) => Nav.NavigateTo($"cadastros/projetos/editar?id={p.Id}");
+
+    private async Task ExcluirAsync(ProjetoDto p)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Excluir o projeto {p.Id} - {p.Nome}?")) return;
+
+        erro = null;
+        try
+        {
+            var erros = await Api.ExcluirAsync(p.Id!.Value);
+            if (erros.Count == 0) projetos.Remove(p);
+            else erro = string.Join(" ", erros.Values.SelectMany(x => x));
+        }
+        catch (Exception ex)
+        {
+            erro = $"Não foi possível excluir: {ex.Message}";
+        }
+    }
+}

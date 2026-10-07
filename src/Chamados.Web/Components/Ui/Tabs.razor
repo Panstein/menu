@@ -1,0 +1,52 @@
+@* Painel com abas. Use &lt;TabPage&gt; como filhos. *@
+<div class="ui-tabs-panel">
+    <div class="ui-tabs" role="tablist">
+        @foreach (var aba in pages)
+        {
+            <button type="button" role="tab" class="ui-tab @(aba == ativa ? "ui-tab-active" : null)"
+                    aria-selected="@(aba == ativa)" @onclick="() => Ativar(aba)">
+                @aba.Title
+                @if (aba.Badge is not null)
+                {
+                    <span class="ui-badge">@aba.Badge</span>
+                }
+                @if (aba.Dot)
+                {
+                    <span class="ui-dot ui-dot-danger"></span>
+                }
+            </button>
+        }
+    </div>
+
+    <CascadingValue Value="this" IsFixed="true">
+        @ChildContent
+    </CascadingValue>
+</div>
+
+@code {
+    private readonly List<TabPage> pages = [];
+    private TabPage? ativa;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    internal bool IsActive(TabPage page) => page == ativa;
+
+    internal void Register(TabPage page)
+    {
+        pages.Add(page);
+        ativa ??= page;
+        StateHasChanged();
+    }
+
+    internal void Unregister(TabPage page)
+    {
+        pages.Remove(page);
+        if (ativa == page) ativa = pages.FirstOrDefault();
+        StateHasChanged();
+    }
+
+    /// <summary>Re-renderiza a barra quando título/badge de uma aba muda.</summary>
+    internal void Refresh() => StateHasChanged();
+
+    private void Ativar(TabPage page) => ativa = page;
+}

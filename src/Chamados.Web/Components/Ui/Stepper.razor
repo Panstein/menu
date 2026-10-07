@@ -1,0 +1,8 @@
+@* Acompanhamento em etapas numeradas. Use &lt;StepItem&gt; como filhos. *@
+<div class="ui-stepper">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

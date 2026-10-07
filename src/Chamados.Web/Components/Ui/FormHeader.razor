@@ -1,0 +1,32 @@
+@* Cabeçalho do formulário: bloco azul de identificação + campos-resumo + painel lateral (status/alertas). *@
+<div class="ui-header">
+    <div class="ui-header-id">
+        <div class="ui-header-caption">@Caption</div>
+        <div class="ui-header-number">@Number</div>
+    </div>
+
+    <div class="ui-header-fields">
+        @ChildContent
+    </div>
+
+    @if (Aside is not null)
+    {
+        <div class="ui-header-aside">
+            @Aside
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Texto pequeno do bloco azul (ex.: "ORDEM DE SERVIÇO").</summary>
+    [Parameter] public string? Caption { get; set; }
+
+    /// <summary>Identificador em destaque (ex.: "1973").</summary>
+    [Parameter] public string? Number { get; set; }
+
+    /// <summary>Campos-resumo (use &lt;HeaderField&gt;).</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Coluna à direita: alertas, status e lista chave/valor.</summary>
+    [Parameter] public RenderFragment? Aside { get; set; }
+}

@@ -1,0 +1,14 @@
+<span class="ui-pill @Variant.Css("ui-pill")">
+    @if (Dot)
+    {
+        <span class="ui-dot @DotVariant.Css("ui-dot")" style="@(DotVariant == UiVariant.Neutral ? "background:#1f2937" : null)"></span>
+    }
+    @Text
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+    [Parameter] public UiVariant Variant { get; set; } = UiVariant.Neutral;
+    [Parameter] public bool Dot { get; set; }
+    [Parameter] public UiVariant DotVariant { get; set; } = UiVariant.Neutral;
+}

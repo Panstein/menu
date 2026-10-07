@@ -1,0 +1,21 @@
+@* Barra superior: botão do menu (celular), marca e usuário logado. *@
+<header class="topbar">
+    <button class="toggler" title="Menu" @onclick="OnToggleMenu">
+        <i class="bi bi-list"></i>
+    </button>
+
+    <a class="brand" href="">
+        <i class="bi bi-headset"></i> Chamados
+    </a>
+
+    <AuthorizeView>
+        <div class="user">
+            <i class="bi bi-person-circle"></i>
+            <span class="user-name">@context.User.Identity?.Name</span>
+        </div>
+    </AuthorizeView>
+</header>
+
+@code {
+    [Parameter] public EventCallback OnToggleMenu { get; set; }
+}

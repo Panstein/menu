@@ -1,0 +1,130 @@
+.tree {
+    padding: 10px 8px;
+}
+
+.tree-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* linha-guia vertical dos filhos (estilo tree view) */
+.tree-children {
+    position: relative;
+}
+
+    .tree-children::before {
+        content: "";
+        position: absolute;
+        top: 2px;
+        bottom: 14px;
+        left: 31px;
+        border-left: 1px dashed #4a5b73;
+    }
+
+    .tree-children > .tree-item {
+        position: relative;
+    }
+
+        /* conector horizontal até cada filho */
+        .tree-children > .tree-item::before {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 31px;
+            width: 12px;
+            border-top: 1px dashed #4a5b73;
+        }
+
+.tree-node {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 7px 8px 7px calc(4px + var(--nivel, 0) * 22px);
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: #c8d3e3;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    position: relative;
+}
+
+    .tree-node:hover {
+        background: #2a3a50;
+        color: #fff;
+    }
+
+    .tree-node.ativo {
+        background: var(--ui-primary);
+        color: #fff;
+    }
+
+    .tree-node.pasta {
+        color: #e6ecf5;
+    }
+
+    .tree-node.sair {
+        margin-top: 6px;
+    }
+
+        .tree-node.sair:hover {
+            background: rgba(211, 47, 47, .18);
+            color: #ffb4b4;
+        }
+
+.tree-chevron {
+    display: inline-flex;
+    justify-content: center;
+    width: 14px;
+    flex: none;
+    font-size: 10px;
+    color: #8ea0b8;
+}
+
+.tree-icon {
+    font-size: 14px;
+    color: #7fb0ff;
+    flex: none;
+}
+
+.tree-node.ativo .tree-icon,
+.tree-node.ativo .tree-chevron {
+    color: #fff;
+}
+
+.tree-node.sair .tree-icon {
+    color: #f08a8a;
+}
+
+.tree-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* carregando / erro ao ler o menu da CH_MENU */
+.tree-status {
+    padding: 8px 12px;
+    font-size: .85rem;
+    color: #aab6c8;
+}
+
+    .tree-status.erro {
+        color: #f3b4b4;
+    }
+
+.tree-retry {
+    display: block;
+    margin-top: 6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}

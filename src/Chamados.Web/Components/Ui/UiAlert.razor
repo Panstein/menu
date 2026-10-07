@@ -1,0 +1,13 @@
+<div class="ui-alert @Variant.Css("ui-alert")" role="alert">
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <i class="bi @Icon"></i>
+    }
+    <span>@ChildContent</span>
+</div>
+
+@code {
+    [Parameter] public UiVariant Variant { get; set; } = UiVariant.Danger;
+    [Parameter] public string? Icon { get; set; } = "bi-exclamation-triangle-fill";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

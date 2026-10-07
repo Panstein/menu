@@ -1,0 +1,11 @@
+/* Brasão centralizado na área de conteúdo, bem suave, sem interferir em cliques. */
+.marca-dagua {
+    height: calc(100vh - 46px - 36px); /* altura da tela - barra superior - padding do conteúdo */
+    min-height: 240px;
+    background: url("img/brasao.png") center / contain no-repeat;
+    opacity: .12;
+    /* "multiply" faz o fundo creme da imagem sumir sobre o fundo da página */
+    mix-blend-mode: multiply;
+    pointer-events: none;
+    user-select: none;
+}

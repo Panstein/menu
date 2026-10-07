@@ -1,0 +1,57 @@
+@* Janela modal no padrão (cabeçalho azul-claro como as seções). Fecha com Esc ou clique fora. *@
+@if (Open)
+{
+    <div class="ui-modal-backdrop" @onclick="FecharAsync"></div>
+    <div class="ui-modal" role="dialog" aria-modal="true" aria-label="@Title" style="@(Width is null ? null : $"max-width:{Width}")"
+         tabindex="-1" @ref="janela" @onkeydown="TeclaAsync">
+        <div class="ui-section-header">
+            <h2 class="ui-section-title">
+                @if (!string.IsNullOrEmpty(Icon))
+                {
+                    <i class="bi @Icon"></i>
+                }
+                @Title
+            </h2>
+            <button type="button" class="ui-icon-btn ui-icon-btn-solid" title="Fechar" @onclick="FecharAsync">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="ui-modal-body">
+            @ChildContent
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string? Width { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private ElementReference janela;
+    private bool focar;
+
+    protected override void OnParametersSet() => focar = Open;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (focar && Open)
+        {
+            focar = false;
+            try { await janela.FocusAsync(); } catch { /* elemento pode ter saído da tela */ }
+        }
+    }
+
+    private async Task TeclaAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") await FecharAsync();
+    }
+
+    private async Task FecharAsync()
+    {
+        Open = false;
+        await OpenChanged.InvokeAsync(false);
+    }
+}

@@ -1,0 +1,37 @@
+@* Lookup no padrão: [código][🔍] [descrição somente leitura]. *@
+<div class="ui-lookup">
+    <div class="ui-lookup-code" style="@(CodeWidth is null ? null : $"width:{CodeWidth}")">
+        <input id="@Id" class="ui-input" value="@Code" placeholder="@Placeholder" disabled="@Disabled"
+               @onchange="OnCodeChanged" @onkeydown="OnKeyDown" />
+        <button type="button" class="ui-addon ui-addon-btn" title="Pesquisar" disabled="@Disabled" @onclick="Search">
+            <i class="bi bi-search"></i>
+        </button>
+    </div>
+    <input class="ui-input ui-lookup-desc" value="@Description" readonly tabindex="-1" />
+</div>
+
+@code {
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public string? Code { get; set; }
+    [Parameter] public EventCallback<string?> CodeChanged { get; set; }
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? CodeWidth { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>Disparado ao clicar na lupa ou pressionar F2 no código.</summary>
+    [Parameter] public EventCallback<string?> OnSearch { get; set; }
+
+    private async Task OnCodeChanged(ChangeEventArgs e)
+    {
+        Code = e.Value?.ToString();
+        await CodeChanged.InvokeAsync(Code);
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "F2") await Search();
+    }
+
+    private Task Search() => OnSearch.InvokeAsync(Code);
+}

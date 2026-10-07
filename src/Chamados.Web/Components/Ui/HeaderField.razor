@@ -1,0 +1,19 @@
+<div>
+    <div class="ui-header-field-label">@Label</div>
+    <div class="ui-header-field-value">
+        @if (ChildContent is not null)
+        {
+            @ChildContent
+        }
+        else
+        {
+            @(string.IsNullOrWhiteSpace(Value) ? "—" : Value)
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

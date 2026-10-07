@@ -1,0 +1,24 @@
+@using System.Net.Http
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.AspNetCore.Components.WebAssembly.Http
+@using Microsoft.JSInterop
+@using Chamados.Web
+@using Chamados.Web.Auth
+@using Chamados.Web.Layout
+@using Chamados.Web.Layout.Menu
+@using Chamados.Web.Components.Ui
+@using Chamados.Web.Services
+@using Chamados.Shared.Auth
+@using Chamados.Shared.Usuarios
+@using Chamados.Shared.Menus
+@using Chamados.Shared.Projetos
+@using Chamados.Shared.Grupos
+
+@* Todas as páginas exigem login; use [AllowAnonymous] para exceções (ex.: Login). *@
+@attribute [Authorize]

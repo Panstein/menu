@@ -1,0 +1,40 @@
+@typeparam TItem
+@* Declaração de coluna do DataGrid (não renderiza nada sozinha). *@
+
+@code {
+    [CascadingParameter] private DataGrid<TItem>? Grid { get; set; }
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Valor usado para exibição, busca e ordenação.</summary>
+    [Parameter] public Func<TItem, object?>? Field { get; set; }
+
+    /// <summary>Formato .NET aplicado ao Field (ex.: "dd/MM/yyyy HH:mm", "N2").</summary>
+    [Parameter] public string? Format { get; set; }
+
+    /// <summary>Conteúdo customizado da célula.</summary>
+    [Parameter] public RenderFragment<TItem>? Template { get; set; }
+
+    [Parameter] public bool Sortable { get; set; } = true;
+
+    /// <summary>"start" (padrão), "center" ou "end".</summary>
+    [Parameter] public string Align { get; set; } = "start";
+
+    [Parameter] public string? Width { get; set; }
+
+    private static readonly System.Globalization.CultureInfo PtBr = new("pt-BR");
+
+    internal string? FormatValue(TItem item)
+    {
+        var valor = Field?.Invoke(item);
+        return valor switch
+        {
+            null => null,
+            IFormattable f when Format is not null => f.ToString(Format, PtBr),
+            bool b => b ? "Sim" : "Não",
+            _ => Convert.ToString(valor, PtBr)
+        };
+    }
+
+    protected override void OnInitialized() => Grid?.AddColumn(this);
+}

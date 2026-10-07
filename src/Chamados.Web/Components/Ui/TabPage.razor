@@ -1,0 +1,42 @@
+@implements IDisposable
+
+@if (Parent?.IsActive(this) == true)
+{
+    <div role="tabpanel" class="d-flex flex-column gap-3">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Tabs? Parent { get; set; }
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Contador exibido ao lado do título.</summary>
+    [Parameter] public int? Badge { get; set; }
+
+    /// <summary>Ponto vermelho de pendência.</summary>
+    [Parameter] public bool Dot { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool registrada;
+    private (string, int?, bool) ultimoCabecalho;
+
+    protected override void OnParametersSet()
+    {
+        var cabecalho = (Title, Badge, Dot);
+        if (!registrada)
+        {
+            Parent?.Register(this);
+            registrada = true;
+        }
+        else if (cabecalho != ultimoCabecalho)
+        {
+            Parent?.Refresh();
+        }
+        ultimoCabecalho = cabecalho;
+    }
+
+    public void Dispose() => Parent?.Unregister(this);
+}

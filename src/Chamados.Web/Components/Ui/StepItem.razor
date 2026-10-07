@@ -1,0 +1,17 @@
+<div class="ui-step @(Done ? "ui-step-done" : null)">
+    <div class="ui-step-marker">
+        <span class="ui-step-number">@Number</span>
+    </div>
+    <div class="ui-step-title">@Title</div>
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public int Number { get; set; }
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Etapa concluída: número preenchido e linha contínua.</summary>
+    [Parameter] public bool Done { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,156 @@
+@typeparam TItem
+@* Grid padrão: busca + botões à direita, colunas ordenáveis, ações por linha.
+   Colunas são declaradas com <GridColumn> dentro de <Columns>. *@
+
+<div class="ui-grid">
+    @if (Searchable || Toolbar is not null)
+    {
+        <div class="ui-grid-toolbar">
+            @if (Searchable)
+            {
+                <div class="ui-search">
+                    <i class="bi bi-search"></i>
+                    <input class="ui-input" placeholder="@SearchPlaceholder" value="@busca"
+                           @oninput="e => busca = e.Value?.ToString() ?? string.Empty" />
+                </div>
+            }
+            else
+            {
+                <span></span>
+            }
+            <div class="d-flex gap-2">@Toolbar</div>
+        </div>
+    }
+
+    <CascadingValue Value="this" IsFixed="true">
+        @Columns
+    </CascadingValue>
+
+    <div class="ui-grid-scroll">
+        <table class="ui-table">
+            <thead>
+                <tr>
+                    @if (RowActions is not null)
+                    {
+                        <th class="ui-col-actions"></th>
+                    }
+                    @foreach (var col in colunas)
+                    {
+                        <th class="@AlignClass(col)" style="@(col.Width is null ? null : $"width:{col.Width}")">
+                            @if (col.Sortable && col.Field is not null)
+                            {
+                                <div class="ui-th-sort @(ordem == col ? "ui-sorted" : null)" @onclick="() => Ordenar(col)">
+                                    <span>@col.Title</span>
+                                    <i class="bi @(ordem != col ? "bi-arrow-down-up" : desc ? "bi-sort-down" : "bi-sort-up")"></i>
+                                </div>
+                            }
+                            else
+                            {
+                                @col.Title
+                            }
+                        </th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @if (Loading)
+                {
+                    <tr><td class="ui-grid-empty" colspan="@TotalColunas"><span class="spinner-border spinner-border-sm me-2"></span>Carregando...</td></tr>
+                }
+                else if (!Linhas.Any())
+                {
+                    <tr><td class="ui-grid-empty" colspan="@TotalColunas">@EmptyText</td></tr>
+                }
+                else
+                {
+                    @foreach (var item in Linhas)
+                    {
+                        <tr @key="item" @onclick="() => OnRowClick.InvokeAsync(item)" style="@(OnRowClick.HasDelegate ? "cursor:pointer" : null)">
+                            @if (RowActions is not null)
+                            {
+                                <td class="ui-col-actions"><div class="ui-row-actions">@RowActions(item)</div></td>
+                            }
+                            @foreach (var col in colunas)
+                            {
+                                <td class="@AlignClass(col)">
+                                    @if (col.Template is not null)
+                                    {
+                                        @col.Template(item)
+                                    }
+                                    else
+                                    {
+                                        @col.FormatValue(item)
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (ShowFooter && !Loading)
+    {
+        <div class="ui-grid-footer">@Linhas.Count() de @(Items?.Count() ?? 0) registro(s)</div>
+    }
+</div>
+
+@code {
+    [Parameter] public IEnumerable<TItem>? Items { get; set; }
+    [Parameter] public RenderFragment? Columns { get; set; }
+    [Parameter] public RenderFragment<TItem>? RowActions { get; set; }
+    [Parameter] public RenderFragment? Toolbar { get; set; }
+    [Parameter] public bool Searchable { get; set; } = true;
+    [Parameter] public string SearchPlaceholder { get; set; } = "Buscar";
+    [Parameter] public string EmptyText { get; set; } = "Nenhum registro encontrado.";
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public bool ShowFooter { get; set; } = true;
+    [Parameter] public EventCallback<TItem> OnRowClick { get; set; }
+
+    private readonly List<GridColumn<TItem>> colunas = [];
+    private GridColumn<TItem>? ordem;
+    private bool desc;
+    private string busca = "";
+
+    private int TotalColunas => colunas.Count + (RowActions is null ? 0 : 1);
+
+    private IEnumerable<TItem> Linhas
+    {
+        get
+        {
+            var q = Items ?? [];
+
+            if (!string.IsNullOrWhiteSpace(busca))
+            {
+                var termo = busca.Trim();
+                q = q.Where(item => colunas.Any(c =>
+                    c.FormatValue(item)?.Contains(termo, StringComparison.OrdinalIgnoreCase) == true));
+            }
+
+            if (ordem?.Field is { } campo)
+                q = desc ? q.OrderByDescending(campo) : q.OrderBy(campo);
+
+            return q;
+        }
+    }
+
+    internal void AddColumn(GridColumn<TItem> col)
+    {
+        colunas.Add(col);
+        StateHasChanged();
+    }
+
+    private void Ordenar(GridColumn<TItem> col)
+    {
+        desc = ordem == col && !desc;
+        ordem = col;
+    }
+
+    private static string? AlignClass(GridColumn<TItem> col) => col.Align switch
+    {
+        "end" => "ui-text-end",
+        "center" => "ui-text-center",
+        _ => null
+    };
+}

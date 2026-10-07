@@ -1,0 +1,11 @@
+.login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    background:
+        radial-gradient(circle at 15% 20%, rgba(31, 95, 200, .10), transparent 45%),
+        radial-gradient(circle at 85% 80%, rgba(30, 42, 59, .10), transparent 45%),
+        var(--ui-page-bg);
+}
