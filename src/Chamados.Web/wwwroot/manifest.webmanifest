@@ -1,6 +1,6 @@
 {
-  "name": "Chamados",
-  "short_name": "Chamados",
+  "name": "Menus",
+  "short_name": "Menus",
   "id": "./",
   "start_url": "./",
   "display": "standalone",
